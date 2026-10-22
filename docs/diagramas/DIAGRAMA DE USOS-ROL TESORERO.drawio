@@ -1,0 +1,58 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Página-1" id="_DSjzXO4uQm9Jci6e969">
+    <mxGraphModel dx="860" dy="431" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="NlFD7DPVifRmJizgVFT5-23" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="" vertex="1">
+          <mxGeometry height="290" width="318" x="263" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="NlFD7DPVifRmJizgVFT5-1" parent="1" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;" value="Tesorero" vertex="1">
+          <mxGeometry height="80" width="40" x="170" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="NlFD7DPVifRmJizgVFT5-2" edge="1" parent="1" style="endArrow=none;html=1;rounded=0;" target="NlFD7DPVifRmJizgVFT5-3" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="220" y="180" as="sourcePoint" />
+            <mxPoint x="270" y="130" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="NlFD7DPVifRmJizgVFT5-3" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;textShadow=1;" value="Modificar pago" vertex="1">
+          <mxGeometry height="40" width="164" x="340" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="NlFD7DPVifRmJizgVFT5-11" edge="1" parent="1" style="endArrow=none;html=1;rounded=0;" target="NlFD7DPVifRmJizgVFT5-10" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="220" y="180" as="sourcePoint" />
+            <mxPoint x="320" y="180" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="NlFD7DPVifRmJizgVFT5-10" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;" value="Eliminar pago" vertex="1">
+          <mxGeometry height="40" width="164" x="340" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="NlFD7DPVifRmJizgVFT5-15" edge="1" parent="1" source="NlFD7DPVifRmJizgVFT5-14" style="endArrow=none;html=1;rounded=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="170" y="230" as="sourcePoint" />
+            <mxPoint x="220" y="180" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="NlFD7DPVifRmJizgVFT5-14" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;" value="Generar reporte de recaudacion" vertex="1">
+          <mxGeometry height="40" width="164" x="340" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="NlFD7DPVifRmJizgVFT5-22" edge="1" parent="1" style="endArrow=none;html=1;rounded=0;" target="NlFD7DPVifRmJizgVFT5-20" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="220" y="180" as="sourcePoint" />
+            <mxPoint x="270" y="130" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="NlFD7DPVifRmJizgVFT5-20" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;" value="Supervisar informacion" vertex="1">
+          <mxGeometry height="40" width="164" x="340" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="NlFD7DPVifRmJizgVFT5-26" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="Sistema de gestion para la cooperadora escolar" vertex="1">
+          <mxGeometry height="30" width="260" x="292" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="NlFD7DPVifRmJizgVFT5-27" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="ROL: TESORERO" vertex="1">
+          <mxGeometry height="30" width="120" x="362" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

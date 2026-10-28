@@ -15,8 +15,14 @@ export default function RoleBanner() {
     tesorero: {
       bg: 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800/60 text-amber-950 dark:text-amber-200',
       dot: 'bg-amber-600 dark:bg-amber-400',
-      title: 'Tesorero (Máximo Poder Administrativo — RF-10)',
-      desc: 'Casos de Uso habilitados: Validar pagos (validarPago), Modificar pagos por error (HU-05), Eliminar/Anular pagos (HU-06), Consolidar Caja/Egresos/Cierres de Período y Emitir Reportes (HU-07).'
+      title: 'Tesorería (Fiscalización y Auditoría)',
+      desc: 'Casos de Uso habilitados: Ajuste de cuotas con motivo obligatorio en auditoría, conciliación y validación de transferencias con comprobante, rectificación/anulación de pagos, arqueo de caja y cierres de período.'
+    },
+    admin: {
+      bg: 'bg-purple-50/90 dark:bg-purple-950/40 border-purple-300 dark:border-purple-800/60 text-purple-950 dark:text-purple-200',
+      dot: 'bg-purple-600 dark:bg-purple-400',
+      title: 'Administrador Institucional / Rectoría',
+      desc: 'Supervisión ejecutiva integral, gestión de usuarios y roles RBAC, auditoría global y reportes de recaudación.'
     },
     director: {
       bg: 'bg-sky-50/90 dark:bg-sky-950/40 border-sky-300 dark:border-sky-800/60 text-sky-950 dark:text-sky-200',

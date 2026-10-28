@@ -7,6 +7,7 @@ import Navbar from './components/Navbar';
 import RoleBanner from './components/RoleBanner';
 import ReciboModal from './components/ReciboModal';
 import LoginModal from './components/LoginModal';
+import ComprobanteAdjuntoModal from './components/ComprobanteAdjuntoModal';
 
 import RecepcionView from './views/RecepcionView';
 import PadronView from './views/PadronView';
@@ -19,7 +20,7 @@ function MainLayout() {
   const { activeTab, toast } = useCooperadora();
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800 transition-colors">
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors">
       <Navbar />
       <RoleBanner />
 
@@ -32,20 +33,20 @@ function MainLayout() {
         {activeTab === 'estudio' && <EstudioIngenieriaView />}
       </main>
 
-      <footer className="bg-white border-t border-slate-200 py-4 px-4 mt-8 no-print">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
-          <div className="flex items-center gap-2">
+      <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 py-4 px-4 mt-8 no-print">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+          <div className="flex items-center gap-2.5">
             <img
               src="/escudo-colegio.png"
-              alt="Escudo E.E.S. N° 14"
-              className="w-5 h-5 object-contain"
+              alt="Escudo Escuela Normal Superior Dalmacio Vélez Sársfield"
+              className="w-6 h-6 object-contain"
             />
             <span>
-              <strong>Asociación Cooperadora E.E.S. N° 14</strong> — Sistema de Gestión Financiera y Padrón de Socios (Frontend React)
+              <strong>Asociación Cooperadora Escuela Normal Superior Dalmacio Vélez Sársfield</strong> — Sistema de Gestión y Cobranzas
             </span>
           </div>
-          <div>
-            Equipo: Rodríguez, Quinteros, Poveda, Romero • Arquitectura lista para integración REST Backend
+          <div className="font-mono text-[11px]">
+            Arquitectura de Software Full Stack • Módulos 1 a 4
           </div>
         </div>
       </footer>
@@ -53,6 +54,7 @@ function MainLayout() {
       {/* Modales Globales */}
       <ReciboModal />
       <LoginModal />
+      <ComprobanteAdjuntoModal />
 
       {/* Notificación Toast Flotante */}
       {toast && (

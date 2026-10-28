@@ -32,34 +32,38 @@ export const USUARIOS_SISTEMA = [
   {
     id: 1,
     username: 'secretaria',
-    password: '123',
+    password: '123', // Soporte para clave rápida '123' o 'Secre2026*DVS'
+    passwordHash: 'Secre2026*DVS',
     nombre: 'Ana Martínez',
-    email: 'secretaria@ees14.edu.ar',
+    email: 'secretaria@ensdvs.edu.ar',
     rol: 'secretaria',
-    cargo: 'Secretaria Operativa (DVS)'
+    cargo: 'Secretaría Institucional y Cobranzas'
   },
   {
     id: 2,
     username: 'tesorero',
-    password: '123',
+    password: '123', // Soporte para clave rápida '123' o 'Teso2026*DVS'
+    passwordHash: 'Teso2026*DVS',
     nombre: 'Marta Rodríguez',
-    email: 'tesoreria@ees14.edu.ar',
+    email: 'tesoreria@ensdvs.edu.ar',
     rol: 'tesorero',
     cargo: 'Tesorera de Cooperadora'
   },
   {
     id: 3,
-    username: 'director',
-    password: '123',
+    username: 'admin',
+    password: '123', // Soporte para clave rápida '123' o 'Admin2026*DVS'
+    passwordHash: 'Admin2026*DVS',
     nombre: 'Lic. Jorge Domínguez',
-    email: 'direccion@ees14.edu.ar',
-    rol: 'director',
-    cargo: 'Director Institucional'
+    email: 'admin@ensdvs.edu.ar',
+    rol: 'admin',
+    cargo: 'Administrador / Rectoría Institucional'
   },
   {
     id: 4,
     username: 'tutor',
-    password: '123',
+    password: '123', // Soporte para clave rápida '123' o 'Tutor2026*DVS'
+    passwordHash: 'Tutor2026*DVS',
     nombre: 'Carlos Gómez',
     email: 'carlos.gomez@gmail.com',
     rol: 'tutor',
@@ -76,7 +80,7 @@ export function getInitialMockData() {
     selectedTutorPortalId: 'tut-1',
     cooperadora: {
       id: 1,
-      nombre: 'Asociación Cooperadora E.E.S. N° 14',
+      nombre: 'Asociación Cooperadora Escuela Normal Superior Dalmacio Vélez Sársfield',
       cuit: '30-71234567-9',
       direccion: 'Av. Libertador 1450, Buenos Aires',
       cicloLectivo: 2026,
@@ -334,6 +338,13 @@ export function getInitialMockData() {
         montoTotal: 4000,
         medio: 'Transferencia',
         comprobante: 'TRF-BANCO-98214',
+        comprobanteAdjunto: {
+          nombre: 'comprobante_banco_galicia_98214.png',
+          tipo: 'image/svg+xml',
+          tamanio: '14.2 KB',
+          fechaSubida: '2026-04-08 09:39',
+          dataUrl: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="420" viewBox="0 0 600 420"><rect width="600" height="420" fill="%23f8fafc" rx="12"/><rect width="600" height="70" fill="%230f766e" rx="12"/><text x="30" y="44" fill="%23ffffff" font-family="sans-serif" font-size="20" font-weight="bold">BANCO GALICIA — Comprobante de Transferencia</text><rect x="30" y="95" width="540" height="295" fill="%23ffffff" rx="8" stroke="%23cbd5e1" stroke-width="1.5"/><text x="50" y="130" fill="%23334155" font-family="sans-serif" font-size="13" font-weight="bold">DETALLE DE LA OPERACIÓN</text><line x1="50" y1="140" x2="550" y2="140" stroke="%23e2e8f0" stroke-width="1"/><text x="50" y="170" fill="%2364748b" font-family="sans-serif" font-size="12">Referencia / N° Control:</text><text x="250" y="170" fill="%230f172a" font-family="monospace" font-size="13" font-weight="bold">TRF-BANCO-98214</text><text x="50" y="200" fill="%2364748b" font-family="sans-serif" font-size="12">Fecha y Hora:</text><text x="250" y="200" fill="%230f172a" font-family="sans-serif" font-size="13">08/04/2026 - 09:38:15 hs</text><text x="50" y="230" fill="%2364748b" font-family="sans-serif" font-size="12">Cuenta Destino:</text><text x="250" y="230" fill="%230f172a" font-family="sans-serif" font-size="13">Asoc. Coop. ENS Dalmacio Vélez Sársfield</text><text x="50" y="260" fill="%2364748b" font-family="sans-serif" font-size="12">CUIT Destino:</text><text x="250" y="260" fill="%230f172a" font-family="monospace" font-size="13">30-71234567-9</text><text x="50" y="290" fill="%2364748b" font-family="sans-serif" font-size="12">Titular Ordenante:</text><text x="250" y="290" fill="%230f172a" font-family="sans-serif" font-size="13">Carlos Gómez (DNI 28.111.222)</text><text x="50" y="320" fill="%2364748b" font-family="sans-serif" font-size="12">Importe Acreditado:</text><text x="250" y="320" fill="%23047857" font-family="monospace" font-size="17" font-weight="bold">$ 4.000,00 ARS</text><rect x="50" y="340" width="500" height="35" fill="%23ecfdf5" rx="6"/><text x="65" y="362" fill="%23065f46" font-family="sans-serif" font-size="12">✓ Operación exitosa - Acreditación inmediata en línea</text></svg>'
+        },
         operador: 'Secretaría (Ana Martínez)',
         estado: 'valido',
         validadoTesoreria: true,
@@ -516,7 +527,7 @@ export function getInitialMockData() {
         timestamp: '2026-03-01 08:00',
         usuario: 'Sistema',
         accion: 'INICIO_CICLO',
-        detalle: 'Sistema de Gestión Cooperadora Escolar (E.E.S. N° 14) inicializado con control de auditoría RNF-02.'
+        detalle: 'Sistema de Gestión Cooperadora Escolar (Escuela Normal Superior Dalmacio Vélez Sársfield) inicializado con control de auditoría RNF-02.'
       }
     ]
   };

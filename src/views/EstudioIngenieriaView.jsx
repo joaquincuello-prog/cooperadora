@@ -140,7 +140,7 @@ export default function EstudioIngenieriaView() {
               Documentación Técnica y Estudio Completo • Módulos 1 al 4
             </span>
             <h2 className="text-xl font-black text-slate-800 mt-1.5">
-              Sistema de Gestión para la Cooperadora Escolar (E.E.S. N° 14)
+              Sistema de Gestión para la Cooperadora Escolar (Escuela Normal Superior Dalmacio Vélez Sársfield)
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
               Trazabilidad completa entre Relevamiento, Matriz Poder-Interés, Requisitos, Backlog Ágil, FODA, Diagramas UML/DER y Contrato de API para Backend.
@@ -383,7 +383,7 @@ export default function EstudioIngenieriaView() {
               Módulo 1: Definición del Problema, Objetivos y Matriz Poder-Interés
             </h3>
             <p className="text-xs text-slate-600 leading-relaxed mb-4">
-              En la E.E.S. N° 14, la gestión de la asociación cooperadora se realizaba mediante cuadernos y planillas manuales, dificultando verificar rápidamente qué alumnos tenían cuotas pendientes, calcular descuentos por hermanos y emitir reportes transparentes.
+              En la Escuela Normal Superior Dalmacio Vélez Sársfield, la gestión de la asociación cooperadora se realizaba mediante cuadernos y planillas manuales, dificultando verificar rápidamente qué alumnos tenían cuotas pendientes, calcular descuentos por hermanos y emitir reportes transparentes.
             </p>
 
             <div className="overflow-x-auto">

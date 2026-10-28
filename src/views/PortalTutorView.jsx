@@ -9,7 +9,8 @@ export default function PortalTutorView() {
     getStudent,
     getStudentCuotas,
     hasSiblingDiscount,
-    setActiveReciboId
+    setActiveReciboId,
+    setPreviewComprobante
   } = useCooperadora();
 
   const [dniFilter, setDniFilter] = useState('');
@@ -79,7 +80,7 @@ export default function PortalTutorView() {
               Portal de Autogestión Familiar y Descarga de Comprobantes
             </h2>
             <p className="text-xs text-teal-100 mt-1 max-w-2xl">
-              Consulte el estado de cuenta de todos sus hijos matriculados en la E.E.S. N° 14, verifique la aplicación automática del descuento del 20% por hermanos y descargue sus recibos oficiales.
+              Consulte el estado de cuenta de todos sus hijos matriculados en la Escuela Normal Superior Dalmacio Vélez Sársfield, verifique la aplicación automática del descuento del 20% por hermanos y descargue sus recibos oficiales.
             </p>
           </div>
 
@@ -258,13 +259,35 @@ export default function PortalTutorView() {
                             ${rec.montoTotal.toLocaleString('es-AR')}
                           </td>
                           <td className="py-3.5 px-4 text-right">
-                            <button
-                              onClick={() => setActiveReciboId(rec.id)}
-                              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-sm inline-flex items-center gap-1.5"
-                            >
-                              <i className="fa-solid fa-file-pdf"></i>
-                              Obtener Comprobante
-                            </button>
+                            <div className="flex items-center justify-end gap-2">
+                              {rec.comprobanteAdjunto && (
+                                <button
+                                  onClick={() =>
+                                    setPreviewComprobante({
+                                      pagoId: rec.id,
+                                      alumnoNombre: alu ? `${alu.apellido}, ${alu.nombre}` : 'Hijo/a',
+                                      comprobanteRef: rec.comprobante,
+                                      medio: rec.medio,
+                                      monto: rec.montoTotal,
+                                      fecha: rec.fecha,
+                                      adjunto: rec.comprobanteAdjunto
+                                    })
+                                  }
+                                  className="px-2.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition shadow-2xs inline-flex items-center gap-1.5"
+                                  title="Ver comprobante bancario digital"
+                                >
+                                  <i className="fa-solid fa-paperclip"></i>
+                                  <span>Transferencia</span>
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setActiveReciboId(rec.id)}
+                                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-sm inline-flex items-center gap-1.5"
+                              >
+                                <i className="fa-solid fa-file-pdf"></i>
+                                <span>Recibo Oficial</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );

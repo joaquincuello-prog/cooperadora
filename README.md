@@ -1,51 +1,57 @@
-# Sistema de Gestión para la Cooperadora Escolar — E.E.S. N° 14 (Frontend React)
+# Sistema de Gestión para la Cooperadora Escolar — Escuela Normal Superior Dalmacio Vélez Sársfield
 
-Aplicación web **Frontend en React + Vite** desarrollada a partir del Estudio Integral de Ingeniería de Software (**Módulos 1 al 4**, Diagramas de Clases UML, Diagrama Entidad-Relación DER y los 4 Diagramas de Casos de Uso).
+Aplicación web Full Stack para la **Asociación Cooperadora de la Escuela Normal Superior Dalmacio Vélez Sársfield**, desarrollada con arquitectura moderna en **React 18 + Vite** y especificación de **API REST Backend en Node.js/Express + PostgreSQL / MySQL**.
+
+---
+
+## 🏛️ Requerimientos y Módulos Implementados
+
+### 1. Branding e Identidad Institucional
+- Denominación oficial actualizada en toda la interfaz (navbar, títulos, modales, tabla de cuotas, libro diario, membretes oficiales de recibos y exportación PDF/CSV): **"Escuela Normal Superior Dalmacio Vélez Sársfield"**.
+- Identidad visual con escudo oficial, CUIT `30-71234567-9` y ciclo lectivo activo.
+
+### 2. Módulo de Autenticación, Roles y Navegación (RBAC & JWT)
+- **Autenticación con Tokens JWT Seguros**: Emisión de tokens de sesión con firma criptográfica y vigencia de 8 horas (`authService` / `sessionStorage`).
+- **Credenciales Individuales por Usuario**:
+  - **Secretaría**: `secretaria@ensdvs.edu.ar` (Usuario: `secretaria` • Clave: `Secre2026*DVS` o rápida `123`)
+  - **Tesorería**: `tesoreria@ensdvs.edu.ar` (Usuario: `tesorero` • Clave: `Teso2026*DVS` o rápida `123`)
+  - **Administrador**: `admin@ensdvs.edu.ar` (Usuario: `admin` • Clave: `Admin2026*DVS` o rápida `123`)
+  - **Padre / Tutor**: `carlos.gomez@gmail.com` (Usuario: `tutor` • Clave: `Tutor2026*DVS` o rápida `123`)
+- **Navegación Limpia y Visualización Condicional**:
+  - Pestañas principales filtradas estrictamente según los permisos del rol activo (RBAC).
+  - Menú colapsable desplegable de **Herramientas del Sistema** (Backups JSON, Restauración, CSV Excel, selector rápido de perfiles de prueba y reinicio demo) para no sobrecargar la vista principal.
+
+### 3. Módulo de Tesorería: Ajuste de Cuotas y Auditoría Obligatoria
+- **Modificación de Cuotas**: Posibilidad de reajustar aranceles de cuotas de forma **individual** por alumno o de forma **general / masiva** para cuotas pendientes.
+- **Motivo de Ajuste Obligatorio**: Validación estricta del campo `motivo_ajuste` (justificación) antes de aplicar cualquier cambio de monto.
+- **Trazabilidad y Bitácora Inmutable**: Registro automático de fecha, hora, usuario responsable, monto anterior, monto nuevo y motivo tanto en la entidad cuota (`historialAjustes`) como en la tabla global de auditoría fiscal (`auditLogs`).
+- **Filtros Avanzados Predictivos**: Buscador predictivo en tiempo real por estudiante (nombre, apellido o DNI) en el Libro Diario de Cobros y en la Gestión de Cuentas Corrientes.
+
+### 4. Módulo de Secretaría: Cobranzas y Comprobantes
+- **Registro de Transferencias Bancarias**: Al asentar un pago con medio `Transferencia`, se habilita la subida de archivo digital de comprobante (formatos soportados: **JPG, PNG, PDF** con límite de 8 MB).
+- **Almacenamiento Seguro y Persistente**: Vinculación del comprobante digital (metadatos, MIME type, tamaño y DataURL) al objeto del pago.
+- **Previsualizador y Descarga de Comprobantes**: Componente modal [`ComprobanteAdjuntoModal`](src/components/ComprobanteAdjuntoModal.jsx) interactivo con visor embebido de documentos PDF y visor de imágenes con descarga directa de archivos con su nombre original.
 
 ---
 
 ## 🚀 Cómo ejecutar el proyecto localmente
 
-1. Instalar dependencias:
-   ```bash
-   npm install
-   ```
-2. Iniciar el servidor de desarrollo:
-   ```bash
-   npm run dev
-   ```
-3. Compilar para producción:
-   ```bash
-   npm run build
-   ```
+### Frontend (React + Vite)
+```bash
+# 1. Instalar dependencias
+npm install
 
----
+# 2. Iniciar servidor de desarrollo
+npm run dev
 
-## 🏗️ Arquitectura del Frontend (Preparada para conectar con Backend)
+# 3. Compilar para producción
+npm run build
+```
 
-Siguiendo la división de tareas del equipo, este repositorio contiene **únicamente el Frontend en React**, desacoplado de la base de datos mediante una capa de servicios lista para conectarse a una API REST:
-
-- [`src/services/cooperadoraApi.js`](src/services/cooperadoraApi.js): Capa de servicio y contrato de endpoints REST (`API_ENDPOINTS_CONTRACT`). Actualmente persiste en `localStorage` para permitir pruebas completas sin servidor, y documenta cada ruta (`GET`, `POST`, `PUT`, `PATCH`) para que el desarrollador Backend solo deba reemplazar las funciones por llamadas `fetch` o `axios`.
-- [`src/data/mockData.js`](src/data/mockData.js): Semilla de datos iniciales coherente con los diagramas (`Cooperadora`, `Tesoreria`, `Tutores/Socios`, `Alumnos`, `Cuotas`, `Pagos/Comprobantes`, `Usuarios` de los 4 roles y `ESTUDIO_PROYECTO` con los Módulos 1 a 4).
-- [`src/context/CooperadoraContext.jsx`](src/context/CooperadoraContext.jsx): Implementación de todos los métodos de los Diagramas de Clases (`registrarCobro`, `registrarAlumno`, `guardarTutor`/`actualizarDatos`, `registrarNuevaCuota`/`gestionarCuotas`, `modificarPago`, `anularPago`, `validarPagoTesoreria`, `registrarEgresoTesoreria`, `cerrarPeriodoTesoreria`, `exportBackupJSON`, `exportPadronCSV`).
-
----
-
-## 👥 Los 4 Roles Interactivos (Casos de Uso UML)
-
-1. **Secretaría (`DIAGRAMA DE USOS-ROL SECRETARIA.drawio`)**:
-   - Registrar Alumno (`RF-01`, `HU-01`) y asociar Padre/Tutor (`RF-02`).
-   - Registrar Cuota / Gestionar cargos (`RF-03`).
-   - Consultar Estado de Cuenta (`RF-06`, `HU-03`).
-   - Registrar Pago (`Efectivo` / `Transferencia`, `RF-04`, `HU-02`) con cálculo automático del **20% de descuento por hermanos (`RF-05`)** y opción de `calcularRecargo()`.
-   - Emitir e imprimir Comprobante de Pago numerado con el escudo oficial de la E.E.S. N° 14 (`RF-07`, `HU-04`).
-2. **Tesorero (`DIAGRAMA DE USOS-ROL TESORERO`)**:
-   - Validar pagos (`Tesorero.validarPago()`).
-   - Modificar pagos con motivo obligatorio (`RF-10`, `HU-05`).
-   - Anular pagos revirtiendo cuotas a estado pendiente (`RF-10`, `HU-06`, `Pago.anular()`).
-   - Registrar egresos de caja y ejecutar el cierre contable del período (`Tesoreria.calcularSaldo()`, `Tesoreria.cerrarPeriodo()`).
-   - Auditar la bitácora inmutable de eventos (`RNF-02`).
-3. **Director (`DIAGRAMA DE USOS-ROL DIRECTOR.drawio`)**:
-   - Acceso de solo lectura gerencial (`RF-09`) al tablero de reportes financieros, morosidad y recaudación por período (`RF-08`, `HU-09`).
-4. **Padre / Tutor (`Diagrama de Caso de Uso PADRE / TUTOR`)**:
-   - Portal de autogestión familiar para consultar el estado de cuenta de sus hijos (`Socio.consultarEstadoCuenta()`) y **Obtener Comprobante de Pago** (`HU-08`).
+### Backend (Node.js + Express + SQL)
+```bash
+cd backend
+npm install
+npm start
+```
+El esquema relacional de base de datos se encuentra documentado en [`backend/schema.sql`](backend/schema.sql).

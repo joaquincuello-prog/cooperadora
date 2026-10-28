@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { cooperadoraApi } from '../services/cooperadoraApi';
+import { cooperadoraApi, authService } from '../services/cooperadoraApi';
 import {
   CUOTA_BASE,
   DESCUENTO_HERMANO_PCT,
@@ -19,14 +19,32 @@ export function CooperadoraProvider({ children }) {
   });
   const [toast, setToast] = useState(null);
 
+  // Sesión segura basada en Tokens JWT
+  const [sessionToken, setSessionToken] = useState(() => authService.getToken());
+
   // Modales globales
   const [activeReciboId, setActiveReciboId] = useState(null);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [previewComprobante, setPreviewComprobante] = useState(null);
 
   // Sincronizar en localStorage cada vez que cambia state
   useEffect(() => {
     cooperadoraApi.saveState(state);
   }, [state]);
+
+  // Verificar validez del Token JWT al montar
+  useEffect(() => {
+    const token = authService.getToken();
+    if (token) {
+      const res = authService.verifyToken(token);
+      if (res.valid) {
+        setSessionToken(token);
+      } else {
+        authService.removeToken();
+        setSessionToken(null);
+      }
+    }
+  }, []);
 
   // Aplicar tema oscuro/claro al HTML
   useEffect(() => {
@@ -65,60 +83,102 @@ export function CooperadoraProvider({ children }) {
     };
   };
 
-  // --- AUTENTICACIÓN Y CAMBIO DE ROL (RNF-01, RF-09) ---
+  // --- AUTENTICACIÓN, SESIONES SEGURAS CON JWT Y CONTROL DE ACCESO (RBAC) ---
   const setRole = (role) => {
     const matchingUser =
       USUARIOS_SISTEMA.find((u) => u.rol === role) || USUARIOS_SISTEMA[0];
+
+    // Generar token JWT para la sesión con este rol
+    const token = authService.generateToken(matchingUser);
+    authService.saveToken(token);
+    setSessionToken(token);
+
     setState((prev) => ({
       ...prev,
       role,
       currentUser: matchingUser
     }));
 
-    // Redirección inteligente según el Caso de Uso del Rol
-    if (role === 'director' && (activeTab === 'recepcion' || activeTab === 'tesoreria')) {
+    // Redirección contextual según el Rol RBAC
+    if ((role === 'director' || role === 'admin') && (activeTab === 'recepcion' || activeTab === 'tesoreria')) {
       setActiveTab('reportes');
     } else if (role === 'tutor') {
       setActiveTab('portalTutor');
+    } else if (role === 'tesorero' && activeTab === 'portalTutor') {
+      setActiveTab('tesoreria');
+    } else if (role === 'secretaria' && (activeTab === 'tesoreria' || activeTab === 'portalTutor')) {
+      setActiveTab('recepcion');
     }
 
     const roleNames = {
-      secretaria: 'Secretaría (Operativo)',
-      tesorero: 'Tesorero (Fiscal y Auditoría)',
-      director: 'Director (Consulta de Reportes)',
-      tutor: 'Padre / Tutor (Autogestión Familiar)'
+      secretaria: 'Secretaría Institucional',
+      tesorero: 'Tesorería y Auditoría',
+      director: 'Director Institucional',
+      admin: 'Administrador General',
+      tutor: 'Padre / Tutor (Socio)'
     };
     showToast(`Rol activo: ${roleNames[role] || role}`, 'info');
   };
 
-  const iniciarSesion = (username, password) => {
+  const iniciarSesion = (usernameOrEmail, password) => {
+    const input = (usernameOrEmail || '').trim().toLowerCase();
     const found = USUARIOS_SISTEMA.find(
       (u) =>
-        (u.username.toLowerCase() === username.toLowerCase() ||
-          u.email.toLowerCase() === username.toLowerCase()) &&
-        u.password === password
+        (u.username.toLowerCase() === input || u.email.toLowerCase() === input) &&
+        (u.password === password || u.passwordHash === password)
     );
+
     if (!found) {
-      return { ok: false, error: 'Credenciales inválidas. Verifique usuario y contraseña.' };
+      return { ok: false, error: 'Credenciales inválidas. Verifique su usuario/correo institucional y contraseña.' };
     }
+
+    // Generar y almacenar token JWT seguro
+    const token = authService.generateToken(found);
+    authService.saveToken(token);
+    setSessionToken(token);
+
     setState((prev) => ({
       ...prev,
       role: found.rol,
       currentUser: found,
       selectedTutorPortalId: found.tutorId || prev.selectedTutorPortalId,
       auditLogs: [
-        createAuditEntry(found.cargo, 'INICIO_SESION', `Acceso autenticado de ${found.nombre} (${found.email}).`),
+        createAuditEntry(
+          found.cargo,
+          'INICIO_SESION_JWT',
+          `Sesión segura JWT autenticada para ${found.nombre} (${found.email}). Rol: ${found.rol.toUpperCase()}.`
+        ),
         ...prev.auditLogs
       ]
     }));
-    if (found.rol === 'director') setActiveTab('reportes');
+
+    if (found.rol === 'director' || found.rol === 'admin') setActiveTab('reportes');
     if (found.rol === 'tutor') setActiveTab('portalTutor');
     if (found.rol === 'secretaria') setActiveTab('recepcion');
     if (found.rol === 'tesorero') setActiveTab('tesoreria');
 
     setIsLoginModalOpen(false);
-    showToast(`Bienvenido/a, ${found.nombre} (${found.cargo})`, 'success');
-    return { ok: true };
+    showToast(`Bienvenido/a, ${found.nombre} (${found.cargo}) — Sesión JWT iniciada`, 'success');
+    return { ok: true, user: found, token };
+  };
+
+  const cerrarSesion = () => {
+    const user = state.currentUser;
+    authService.removeToken();
+    setSessionToken(null);
+    setState((prev) => ({
+      ...prev,
+      auditLogs: [
+        createAuditEntry(
+          user?.cargo || 'Usuario',
+          'CIERRE_SESION_JWT',
+          `Cierre de sesión de ${user?.nombre || 'usuario'} (${user?.email || '-'}). Token revocado.`
+        ),
+        ...prev.auditLogs
+      ]
+    }));
+    showToast('Sesión finalizada correctamente.', 'info');
+    setIsLoginModalOpen(true);
   };
 
   // --- SELECTORES Y REGLAS DE NEGOCIO ---
@@ -161,9 +221,9 @@ export function CooperadoraProvider({ children }) {
     setSelectedCuotaIds(pendingIds);
   };
 
-  // --- MÉTODOS DEL DIAGRAMA DE CLASES ---
+  // --- MÉTODOS DE NEGOCIO Y CASOS DE USO ---
 
-  // 1. Pago.registrar() + Comprobante.emitir() (RF-04, RF-05, RF-07, HU-02, HU-04)
+  // 1. Pago.registrar() + Comprobante.emitir() con soporte para transferencia y archivo adjunto
   const registrarCobro = ({
     studentId,
     cuotaIds,
@@ -171,7 +231,8 @@ export function CooperadoraProvider({ children }) {
     comprobanteRef,
     fecha,
     aplicarRecargoMora = false,
-    observaciones = ''
+    observaciones = '',
+    comprobanteAdjunto = null
   }) => {
     if (state.role === 'director' || state.role === 'tutor') {
       showToast('Su rol actual es de consulta y no permite registrar cobros.', 'warning');
@@ -186,7 +247,6 @@ export function CooperadoraProvider({ children }) {
     const aplicaDesc = hasSiblingDiscount(student.id);
     const discountAmount = aplicaDesc ? Math.round(subtotal * DESCUENTO_HERMANO_PCT) : 0;
 
-    // calcularRecargo() en clase Cuota si tiene cuotas vencidas y se activa
     const montoVencidas = cuotasACobrar
       .filter((c) => c.estado === 'vencida')
       .reduce((acc, c) => acc + c.monto, 0);
@@ -207,7 +267,7 @@ export function CooperadoraProvider({ children }) {
 
     const operadorLabel =
       state.role === 'tesorero'
-        ? `Tesorero (${state.currentUser?.nombre || 'Marta Rodríguez'})`
+        ? `Tesorería (${state.currentUser?.nombre || 'Marta Rodríguez'})`
         : `Secretaría (${state.currentUser?.nombre || 'Ana Martínez'})`;
 
     const nuevoPago = {
@@ -224,6 +284,7 @@ export function CooperadoraProvider({ children }) {
       montoTotal: total,
       medio,
       comprobante: comprobanteRef,
+      comprobanteAdjunto: comprobanteAdjunto || null,
       operador: operadorLabel,
       estado: 'valido',
       validadoTesoreria: state.role === 'tesorero',
@@ -243,9 +304,9 @@ export function CooperadoraProvider({ children }) {
       pagos: [nuevoPago, ...prev.pagos],
       auditLogs: [
         createAuditEntry(
-          prev.role === 'tesorero' ? 'Tesorero' : 'Secretaría',
+          prev.role === 'tesorero' ? 'Tesorería' : 'Secretaría',
           'COBRO_REGISTRADO',
-          `Emisión de comprobante ${reciboId} a ${student.apellido}, ${student.nombre}. Total: $${total.toLocaleString('es-AR')} (${medio} Ref: ${comprobanteRef}).`
+          `Emisión de recibo ${reciboId} para ${student.apellido}, ${student.nombre}. Importe: $${total.toLocaleString('es-AR')} (${medio} Ref: ${comprobanteRef}${comprobanteAdjunto ? ' con comprobante adjunto: ' + comprobanteAdjunto.nombre : ''}).`
         ),
         ...prev.auditLogs
       ]
@@ -257,7 +318,160 @@ export function CooperadoraProvider({ children }) {
     return nuevoPago;
   };
 
-  // 2. Secretaria.registrarAlumno() + Cooperadora.registrarSocio() (RF-01, RF-02, HU-01)
+  // 2. Asociar o actualizar archivo de comprobante a un pago ya registrado
+  const subirComprobantePago = ({ pagoId, comprobanteAdjunto }) => {
+    setState((prev) => ({
+      ...prev,
+      pagos: prev.pagos.map((p) =>
+        p.id === pagoId ? { ...p, comprobanteAdjunto } : p
+      ),
+      auditLogs: [
+        createAuditEntry(
+          state.currentUser?.cargo || 'Secretaría',
+          'COMPROBANTE_TRANSFERENCIA_SUBIDO',
+          `Comprobante digital "${comprobanteAdjunto.nombre}" vinculado de forma segura al recibo ${pagoId}.`
+        ),
+        ...prev.auditLogs
+      ]
+    }));
+    showToast(`Comprobante adjuntado exitosamente al recibo ${pagoId}.`, 'success');
+  };
+
+  // 3. MÓDULO DE TESORERÍA: Ajuste de Cuotas con Justificación y Auditoría Obligatoria
+  const ajustarCuota = ({ cuotaId, nuevoMonto, motivoAjuste }) => {
+    const rolActual = state.role;
+    if (rolActual !== 'tesorero' && rolActual !== 'admin') {
+      showToast('Acceso denegado: Solo el rol de Tesorería o Administrador puede editar aranceles de cuotas.', 'warning');
+      return { ok: false, error: 'Permisos insuficientes' };
+    }
+
+    if (!motivoAjuste || motivoAjuste.trim().length < 5) {
+      showToast('El motivo de ajuste es obligatorio para auditoría (mínimo 5 caracteres).', 'warning');
+      return { ok: false, error: 'Motivo de ajuste obligatorio' };
+    }
+
+    const montoNum = Number(nuevoMonto);
+    if (isNaN(montoNum) || montoNum < 0) {
+      showToast('Por favor ingrese un valor de cuota numérico válido.', 'warning');
+      return { ok: false, error: 'Monto inválido' };
+    }
+
+    const cuotaTarget = state.cuotas.find((c) => c.id === cuotaId);
+    if (!cuotaTarget) {
+      showToast('No se encontró la cuota solicitada.', 'warning');
+      return { ok: false, error: 'Cuota no encontrada' };
+    }
+
+    const alumno = getStudent(cuotaTarget.alumnoId);
+    const alumnoNombre = alumno ? `${alumno.apellido}, ${alumno.nombre}` : cuotaTarget.alumnoId;
+    const montoAnterior = cuotaTarget.monto;
+
+    const ahora = new Date();
+    const fechaHora = ahora.toISOString().replace('T', ' ').slice(0, 16);
+    const usuarioResponsable = state.currentUser?.cargo || `${state.currentUser?.nombre} (Tesorería)`;
+
+    const registroAjuste = {
+      id: `AJU-${Date.now().toString().slice(-6)}`,
+      fecha: fechaHora,
+      usuario: usuarioResponsable,
+      montoAnterior,
+      montoNuevo: montoNum,
+      motivo: motivoAjuste.trim()
+    };
+
+    setState((prev) => ({
+      ...prev,
+      cuotas: prev.cuotas.map((c) =>
+        c.id === cuotaId
+          ? {
+              ...c,
+              monto: montoNum,
+              historialAjustes: [registroAjuste, ...(c.historialAjustes || [])]
+            }
+          : c
+      ),
+      auditLogs: [
+        createAuditEntry(
+          usuarioResponsable,
+          'AJUSTE_CUOTA_AUDITORIA',
+          `Cuota "${cuotaTarget.concepto || cuotaTarget.periodo}" reajustada de $${montoAnterior.toLocaleString('es-AR')} a $${montoNum.toLocaleString('es-AR')} para el alumno ${alumnoNombre}. Justificación obligatoria: "${motivoAjuste.trim()}".`
+        ),
+        ...prev.auditLogs
+      ]
+    }));
+
+    showToast(`Cuota modificada a $${montoNum.toLocaleString('es-AR')}. Auditoría registrada con éxito.`, 'success');
+    return { ok: true };
+  };
+
+  // 4. MÓDULO DE TESORERÍA: Reajuste general / masivo de cuotas con trazabilidad
+  const ajustarCuotasGeneral = ({ periodo, nuevoMonto, motivoAjuste }) => {
+    const rolActual = state.role;
+    if (rolActual !== 'tesorero' && rolActual !== 'admin') {
+      showToast('Acceso denegado: Solo Tesorería puede realizar reajustes generales de cuotas.', 'warning');
+      return { ok: false, error: 'Permisos insuficientes' };
+    }
+
+    if (!motivoAjuste || motivoAjuste.trim().length < 5) {
+      showToast('Debe ingresar un motivo obligatorio para el ajuste general de aranceles.', 'warning');
+      return { ok: false, error: 'Motivo obligatorio' };
+    }
+
+    const montoNum = Number(nuevoMonto);
+    if (isNaN(montoNum) || montoNum <= 0) {
+      showToast('Ingrese un monto válido superior a cero.', 'warning');
+      return { ok: false, error: 'Monto inválido' };
+    }
+
+    const cuotasFiltradas = state.cuotas.filter((c) => {
+      const matchPeriodo = periodo === 'todos_pendientes' || c.periodo === periodo;
+      return matchPeriodo && c.estado !== 'pagada';
+    });
+
+    if (cuotasFiltradas.length === 0) {
+      showToast('No se encontraron cuotas pendientes para aplicar el ajuste general.', 'warning');
+      return { ok: false, error: 'Sin cuotas a modificar' };
+    }
+
+    const fechaHora = new Date().toISOString().replace('T', ' ').slice(0, 16);
+    const usuarioResponsable = state.currentUser?.cargo || `${state.currentUser?.nombre} (Tesorería)`;
+
+    setState((prev) => ({
+      ...prev,
+      cuotas: prev.cuotas.map((c) => {
+        const matchPeriodo = periodo === 'todos_pendientes' || c.periodo === periodo;
+        if (!matchPeriodo || c.estado === 'pagada') return c;
+
+        const ajusteObj = {
+          id: `AJU-GEN-${Date.now().toString().slice(-6)}`,
+          fecha: fechaHora,
+          usuario: usuarioResponsable,
+          montoAnterior: c.monto,
+          montoNuevo: montoNum,
+          motivo: `[Ajuste General: ${periodo}] ${motivoAjuste.trim()}`
+        };
+
+        return {
+          ...c,
+          monto: montoNum,
+          historialAjustes: [ajusteObj, ...(c.historialAjustes || [])]
+        };
+      }),
+      auditLogs: [
+        createAuditEntry(
+          usuarioResponsable,
+          'AJUSTE_GENERAL_ARANCELES',
+          `Reajuste arancelario general ejecutado sobre ${cuotasFiltradas.length} cuotas pendientes (${periodo}). Nuevo valor fijado: $${montoNum.toLocaleString('es-AR')}. Motivo: "${motivoAjuste.trim()}".`
+        ),
+        ...prev.auditLogs
+      ]
+    }));
+
+    showToast(`Ajuste general aplicado con éxito a ${cuotasFiltradas.length} cuotas.`, 'success');
+    return { ok: true, cuotasAfectadas: cuotasFiltradas.length };
+  };
+
+  // 5. Secretaria.registrarAlumno() + Cooperadora.registrarSocio()
   const registrarAlumno = ({ alumnoData, tutorMode, tutorExistenteId, nuevoTutorData }) => {
     let targetTutorId = tutorExistenteId;
     let nuevosTutores = [...state.tutores];
@@ -299,7 +513,8 @@ export function CooperadoraProvider({ children }) {
       vencimiento: mes.vencimiento,
       monto: CUOTA_BASE,
       estado: 'pendiente',
-      pagoId: null
+      pagoId: null,
+      historialAjustes: []
     }));
 
     setState((prev) => ({
@@ -309,9 +524,9 @@ export function CooperadoraProvider({ children }) {
       cuotas: [...prev.cuotas, ...nuevasCuotas],
       auditLogs: [
         createAuditEntry(
-          prev.role === 'tesorero' ? 'Tesorero' : 'Secretaría',
+          prev.role === 'tesorero' ? 'Tesorería' : 'Secretaría',
           'MATRICULACION_ALUMNO',
-          `Alta de alumno ${nuevoAlumno.apellido}, ${nuevoAlumno.nombre} (DNI ${nuevoAlumno.dni}, ${nuevoAlumno.curso} "${nuevoAlumno.division}") asociado al socio/tutor ${targetTutorId}.`
+          `Alta de alumno ${nuevoAlumno.apellido}, ${nuevoAlumno.nombre} (DNI ${nuevoAlumno.dni}, ${nuevoAlumno.curso} "${nuevoAlumno.division}") asociado al tutor ${targetTutorId}.`
         ),
         ...prev.auditLogs
       ]
@@ -321,7 +536,7 @@ export function CooperadoraProvider({ children }) {
     return nuevoAlumno;
   };
 
-  // 3. Socio.actualizarDatos() y Alta independiente de Socio/Tutor (Diagrama de Clases: Socio)
+  // 6. Socio.actualizarDatos() y Alta independiente de Socio/Tutor
   const guardarTutor = (tutorData) => {
     const isEdit = Boolean(tutorData.id);
     if (isEdit) {
@@ -332,9 +547,9 @@ export function CooperadoraProvider({ children }) {
         ),
         auditLogs: [
           createAuditEntry(
-            prev.role === 'tesorero' ? 'Tesorero' : 'Secretaría',
+            prev.role === 'tesorero' ? 'Tesorería' : 'Secretaría',
             'SOCIO_ACTUALIZADO',
-            `Socio.actualizarDatos(): Se actualizaron datos del tutor ${tutorData.apellido}, ${tutorData.nombre} (DNI ${tutorData.dni}).`
+            `Actualización de datos del tutor ${tutorData.apellido}, ${tutorData.nombre} (DNI ${tutorData.dni}).`
           ),
           ...prev.auditLogs
         ]
@@ -358,9 +573,9 @@ export function CooperadoraProvider({ children }) {
         tutores: [...prev.tutores, nuevoSocio],
         auditLogs: [
           createAuditEntry(
-            prev.role === 'tesorero' ? 'Tesorero' : 'Secretaría',
+            prev.role === 'tesorero' ? 'Tesorería' : 'Secretaría',
             'ALTA_SOCIO_TUTOR',
-            `Cooperadora.registrarSocio(): Alta del socio/tutor ${nuevoSocio.apellido}, ${nuevoSocio.nombre} (DNI ${nuevoSocio.dni}).`
+            `Alta de socio/tutor ${nuevoSocio.apellido}, ${nuevoSocio.nombre} (DNI ${nuevoSocio.dni}).`
           ),
           ...prev.auditLogs
         ]
@@ -369,7 +584,7 @@ export function CooperadoraProvider({ children }) {
     }
   };
 
-  // 4. Secretaria.gestionarCuotas() / Cuota.gestionar() (RF-03, Caso de Uso C: Registrar cuota)
+  // 7. Secretaria.gestionarCuotas() — Cargo extraordinario
   const registrarNuevaCuota = ({ alumnoId, concepto, periodo, vencimiento, monto }) => {
     const targetAlumnos =
       alumnoId === 'todos'
@@ -386,7 +601,8 @@ export function CooperadoraProvider({ children }) {
       vencimiento: vencimiento || '30/06/2026',
       monto: Number(monto) || CUOTA_BASE,
       estado: 'pendiente',
-      pagoId: null
+      pagoId: null,
+      historialAjustes: []
     }));
 
     setState((prev) => ({
@@ -394,9 +610,9 @@ export function CooperadoraProvider({ children }) {
       cuotas: [...prev.cuotas, ...cuotasCreadas],
       auditLogs: [
         createAuditEntry(
-          prev.role === 'tesorero' ? 'Tesorero' : 'Secretaría',
+          prev.role === 'tesorero' ? 'Tesorería' : 'Secretaría',
           'CUOTA_REGISTRADA',
-          `Cuota.gestionar(): Se generó el cargo "${concepto}" ($${Number(monto).toLocaleString('es-AR')}) para ${targetAlumnos.length} alumno(s).`
+          `Generación de cargo extraordinario "${concepto}" ($${Number(monto).toLocaleString('es-AR')}) para ${targetAlumnos.length} alumno(s).`
         ),
         ...prev.auditLogs
       ]
@@ -405,17 +621,17 @@ export function CooperadoraProvider({ children }) {
     showToast(`Cuota "${concepto}" registrada correctamente.`, 'success');
   };
 
-  // 5. Tesorero: Modificar Pago (RF-10, HU-05, RNF-02)
+  // 8. Tesorería: Modificar Pago con auditoría (RF-10, HU-05)
   const modificarPago = ({ id, nuevoImporte, nuevoMedio, nuevoComprobante, motivo }) => {
-    if (state.role !== 'tesorero') {
-      showToast('Acceso denegado: Solo el Tesorero puede modificar pagos (RF-10).', 'warning');
+    if (state.role !== 'tesorero' && state.role !== 'admin') {
+      showToast('Acceso denegado: Solo Tesorería puede modificar cobros registrados.', 'warning');
       return false;
     }
 
     const pagoActual = state.pagos.find((p) => p.id === id);
     if (!pagoActual) return false;
 
-    const cambioAnterior = `Monto anterior: $${pagoActual.montoTotal}, Medio anterior: ${pagoActual.medio}, Ref: ${pagoActual.comprobante}`;
+    const cambioAnterior = `Monto anterior: $${pagoActual.montoTotal}, Medio: ${pagoActual.medio}, Ref: ${pagoActual.comprobante}`;
 
     setState((prev) => ({
       ...prev,
@@ -440,9 +656,9 @@ export function CooperadoraProvider({ children }) {
       ),
       auditLogs: [
         createAuditEntry(
-          'Tesorero',
+          'Tesorería',
           'PAGO_RECTIFICADO',
-          `Recibo ${id} modificado. Nuevo importe: $${Number(nuevoImporte).toLocaleString('es-AR')} (${nuevoMedio}). Motivo: "${motivo}".`
+          `Recibo ${id} modificado. Nuevo importe: $${Number(nuevoImporte).toLocaleString('es-AR')} (${nuevoMedio}). Motivo obligatorio: "${motivo}".`
         ),
         ...prev.auditLogs
       ]
@@ -452,10 +668,10 @@ export function CooperadoraProvider({ children }) {
     return true;
   };
 
-  // 6. Tesorero: Anular / Eliminar Pago (RF-10, HU-06, Pago.anular())
+  // 9. Tesorería: Anular Pago revirtiendo cuotas
   const anularPago = ({ id, motivo }) => {
-    if (state.role !== 'tesorero') {
-      showToast('Acceso denegado: Solo el Tesorero puede anular pagos (RF-10).', 'warning');
+    if (state.role !== 'tesorero' && state.role !== 'admin') {
+      showToast('Acceso denegado: Solo Tesorería puede anular pagos.', 'warning');
       return false;
     }
 
@@ -474,9 +690,9 @@ export function CooperadoraProvider({ children }) {
       ),
       auditLogs: [
         createAuditEntry(
-          'Tesorero',
+          'Tesorería',
           'PAGO_ANULADO',
-          `Recibo ${id} ANULADO. Cuotas revertidas a estado Pendiente. Motivo obligatorio: "${motivo}".`
+          `Recibo ${id} ANULADO. Cuotas revertidas a Pendiente. Motivo obligatorio: "${motivo}".`
         ),
         ...prev.auditLogs
       ]
@@ -486,10 +702,10 @@ export function CooperadoraProvider({ children }) {
     return true;
   };
 
-  // 7. Tesorero.validarPago() (Diagrama de clases nuevo: TESORERO -> valida -> PAGO)
+  // 10. Tesorero.validarPago()
   const validarPagoTesoreria = (pagoId) => {
-    if (state.role !== 'tesorero') {
-      showToast('Solo el Tesorero puede visar y validar asientos en Tesorería.', 'warning');
+    if (state.role !== 'tesorero' && state.role !== 'admin') {
+      showToast('Solo Tesorería puede visar asientos contables.', 'warning');
       return;
     }
     setState((prev) => ({
@@ -499,9 +715,9 @@ export function CooperadoraProvider({ children }) {
       ),
       auditLogs: [
         createAuditEntry(
-          'Tesorero',
+          'Tesorería',
           'PAGO_VALIDADO',
-          `Tesorero.validarPago(): El recibo ${pagoId} fue visado y conciliado en Tesorería.`
+          `Recibo ${pagoId} visado y conciliado en Tesorería.`
         ),
         ...prev.auditLogs
       ]
@@ -509,10 +725,10 @@ export function CooperadoraProvider({ children }) {
     showToast(`Recibo ${pagoId} validado por Tesorería.`, 'success');
   };
 
-  // 8. Tesoreria: Registrar Egreso y cerrarPeriodo() (Diagrama de clases cooperadora y DER)
+  // 11. Tesoreria: Registrar Egreso y cerrarPeriodo()
   const registrarEgresoTesoreria = ({ concepto, categoria, importe, comprobante, fecha }) => {
-    if (state.role !== 'tesorero') {
-      showToast('Solo el Tesorero puede registrar egresos de caja.', 'warning');
+    if (state.role !== 'tesorero' && state.role !== 'admin') {
+      showToast('Solo Tesorería puede registrar egresos de caja.', 'warning');
       return;
     }
     const nextNum = (state.tesoreria.egresos?.length || 0) + 1;
@@ -523,7 +739,7 @@ export function CooperadoraProvider({ children }) {
       categoria: categoria || 'Mantenimiento',
       importe: Number(importe),
       comprobante: comprobante.trim() || 'S/C',
-      autorizadoPor: `Tesorero (${state.currentUser?.nombre || 'Marta Rodríguez'})`
+      autorizadoPor: `Tesorería (${state.currentUser?.nombre || 'Marta Rodríguez'})`
     };
 
     setState((prev) => ({
@@ -534,9 +750,9 @@ export function CooperadoraProvider({ children }) {
       },
       auditLogs: [
         createAuditEntry(
-          'Tesorero',
+          'Tesorería',
           'EGRESO_REGISTRADO',
-          `Tesoreria: Registro de gasto ${nuevoEgreso.id} por $${nuevoEgreso.importe.toLocaleString('es-AR')} (${nuevoEgreso.concepto}).`
+          `Registro de gasto ${nuevoEgreso.id} por $${nuevoEgreso.importe.toLocaleString('es-AR')} (${nuevoEgreso.concepto}).`
         ),
         ...prev.auditLogs
       ]
@@ -545,8 +761,8 @@ export function CooperadoraProvider({ children }) {
   };
 
   const cerrarPeriodoTesoreria = (nombrePeriodo) => {
-    if (state.role !== 'tesorero') {
-      showToast('Solo el Tesorero está autorizado a ejecutar cerrarPeriodo().', 'warning');
+    if (state.role !== 'tesorero' && state.role !== 'admin') {
+      showToast('Solo Tesorería está autorizada a cerrar períodos contables.', 'warning');
       return;
     }
     const ingresosValidos = state.pagos
@@ -581,25 +797,25 @@ export function CooperadoraProvider({ children }) {
       },
       auditLogs: [
         createAuditEntry(
-          'Tesorero',
+          'Tesorería',
           'CIERRE_PERIODO',
-          `Tesoreria.cerrarPeriodo(): Cierre contable "${nuevoCierre.periodo}" consolidado. Saldo final en caja: $${saldoFinal.toLocaleString('es-AR')}.`
+          `Cierre contable "${nuevoCierre.periodo}" consolidado. Saldo final en caja: $${saldoFinal.toLocaleString('es-AR')}.`
         ),
         ...prev.auditLogs
       ]
     }));
 
-    showToast(`Período "${nuevoCierre.periodo}" cerrado y consolidado con éxito.`, 'success');
+    showToast(`Período "${nuevoCierre.periodo}" cerrado y balance consolidado.`, 'success');
   };
 
-  // --- MITIGACIÓN DE AMENAZAS FODA (MÓDULO 4): COPIAS DE SEGURIDAD Y EXPORTACIÓN ---
+  // --- RESPALDOS Y EXPORTACIÓN CON IDENTIDAD INSTITUCIONAL ACTUALIZADA ---
   const exportBackupJSON = () => {
     const dataStr = JSON.stringify(state, null, 2);
     const blob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `backup_cooperadora_ees14_${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `backup_cooperadora_dalmacio_velez_sarsfield_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
     showToast('Copia de seguridad (Backup JSON) descargada con éxito.', 'success');
@@ -652,7 +868,7 @@ export function CooperadoraProvider({ children }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `padron_cooperadora_ees14_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `padron_cooperadora_dalmacio_velez_sarsfield_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     showToast('Planilla CSV (Excel) del padrón exportada con éxito.', 'success');
@@ -661,13 +877,13 @@ export function CooperadoraProvider({ children }) {
   const resetDemoData = () => {
     if (
       window.confirm(
-        '¿Desea restablecer todos los datos a la demostración inicial? Se revertirán modificaciones, alumnos creados y cobros de prueba.'
+        '¿Desea restablecer todos los datos a la demostración inicial institucional de la Escuela Normal Superior Dalmacio Vélez Sársfield? Se revertirán modificaciones locales.'
       )
     ) {
       const fresh = cooperadoraApi.resetState();
       setState(fresh);
       setSelectedCuotaIds([]);
-      showToast('Datos de demostración restablecidos con éxito.', 'info');
+      showToast('Datos institucionales restablecidos con éxito.', 'info');
     }
   };
 
@@ -683,12 +899,16 @@ export function CooperadoraProvider({ children }) {
         toggleTheme,
         toast,
         showToast,
+        sessionToken,
         activeReciboId,
         setActiveReciboId,
         isLoginModalOpen,
         setIsLoginModalOpen,
+        previewComprobante,
+        setPreviewComprobante,
         setRole,
         iniciarSesion,
+        cerrarSesion,
         getStudent,
         getTutor,
         getStudentCuotas,
@@ -698,6 +918,9 @@ export function CooperadoraProvider({ children }) {
         toggleCuotaSelection,
         selectAllPendingForStudent,
         registrarCobro,
+        subirComprobantePago,
+        ajustarCuota,
+        ajustarCuotasGeneral,
         registrarAlumno,
         guardarTutor,
         registrarNuevaCuota,

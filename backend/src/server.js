@@ -230,6 +230,125 @@ app.patch(
   }
 );
 
+/**
+ * PATCH /api/pagos/:id/validar
+ * Conciliación Bancaria Rápida: aprueba el cobro, cambia estado a 'Validado' e imputa fondos a Bancos / Caja.
+ */
+app.patch(
+  '/api/pagos/:id/validar',
+  autenticarToken,
+  requerirRoles(['tesorero', 'admin']),
+  async (req, res) => {
+    const { id } = req.params;
+    const { observaciones_conciliacion } = req.body || {};
+
+    return res.json({
+      ok: true,
+      mensaje: `Recibo ${id} conciliado y validado en Tesorería. Fondos imputados.`,
+      conciliacion: {
+        recibo_id: id,
+        validado_tesoreria: true,
+        estado: 'valido',
+        observaciones: observaciones_conciliacion || 'Conciliado en visor Split-View',
+        conciliado_por: req.user.nombre,
+        fecha: new Date().toISOString()
+      }
+    });
+  }
+);
+
+/**
+ * PATCH /api/pagos/:id/anular
+ * Borrado lógico (estado = 'ANULADO'), registro en audit_log y emisión de reverso contable sin destrucción física.
+ */
+app.patch(
+  '/api/pagos/:id/anular',
+  autenticarToken,
+  requerirRoles(['tesorero', 'admin']),
+  async (req, res) => {
+    const { id } = req.params;
+    const { motivo_categoria, detalle_adicional, monto_total, medio_pago, alumno_id } = req.body || {};
+
+    const motivosPermitidos = [
+      'Error de imputación',
+      'Transferencia no acreditada',
+      'Duplicado',
+      'Transferencia no acreditada / Comprobante rechazado'
+    ];
+
+    if (!motivo_categoria || !motivosPermitidos.includes(motivo_categoria)) {
+      return res.status(400).json({
+        ok: false,
+        error: `Debe especificar un motivo tipificado válido: ${motivosPermitidos.join(', ')}.`
+      });
+    }
+
+    const reversoCodigo = `REV-2026-${Date.now().toString().slice(-4)}`;
+    const fechaISO = new Date().toISOString();
+
+    // Transacción SQL en motor MySQL / PostgreSQL:
+    // START TRANSACTION;
+    // 1. UPDATE pagos SET estado = 'ANULADO', validado_tesoreria = FALSE, motivo_anulacion = ?, reverso_contable_id = ? WHERE recibo_codigo = ?;
+    // 2. UPDATE cuotas SET estado = 'pendiente', pago_id = NULL WHERE pago_id = ?;
+    // 3. INSERT INTO reversos_contables (reverso_codigo, pago_id, usuario_id, monto_reverso, medio_afectado, motivo_tipificado, detalle_adicional) VALUES (...);
+    // 4. INSERT INTO audit_log (id_usuario, id_estudiante, fecha, motivo, observaciones, estado_previo, estado_nuevo) VALUES (...);
+    // COMMIT;
+
+    return res.json({
+      ok: true,
+      mensaje: `Recibo ${id} anulado mediante borrado lógico (estado = 'ANULADO') y reverso contable ${reversoCodigo} emitido.`,
+      anulacion: {
+        recibo_id: id,
+        estado_nuevo: 'ANULADO',
+        reverso_contable_id: reversoCodigo,
+        monto_reverso: -Math.abs(Number(monto_total) || 0),
+        medio_afectado: medio_pago || 'Transferencia',
+        motivo: `${motivo_categoria}${detalle_adicional ? ` — ${detalle_adicional}` : ''}`,
+        audit_log: {
+          id_usuario: req.user.id,
+          id_estudiante: alumno_id || null,
+          fecha: fechaISO,
+          estado_previo: 'valido',
+          estado_nuevo: 'ANULADO'
+        }
+      }
+    });
+  }
+);
+
+/**
+ * POST /api/tesoreria/arqueos
+ * Registra un Arqueo de Turno contrastando billetes físicos por denominación contra el saldo esperado en efectivo.
+ */
+app.post(
+  '/api/tesoreria/arqueos',
+  autenticarToken,
+  requerirRoles(['tesorero', 'admin']),
+  async (req, res) => {
+    const { turno, conteo_billetes, otros_valores, efectivo_esperado, efectivo_contado, observaciones } = req.body || {};
+    const diferencia = Number(efectivo_contado) - Number(efectivo_esperado);
+    const estadoArqueo = diferencia === 0 ? 'CUADRADO' : diferencia < 0 ? 'FALTANTE' : 'SOBRANTE';
+
+    return res.status(201).json({
+      ok: true,
+      mensaje: `Acta de arqueo registrada con estado ${estadoArqueo}.`,
+      arqueo: {
+        id: `ARQ-2026-${Date.now().toString().slice(-4)}`,
+        turno: turno || 'Jornada Completa',
+        efectivo_esperado: Number(efectivo_esperado),
+        efectivo_contado: Number(efectivo_contado),
+        diferencia,
+        estado: estadoArqueo,
+        conteo_billetes,
+        otros_valores: Number(otros_valores) || 0,
+        observaciones: observaciones || '',
+        responsable: req.user.nombre,
+        fecha: new Date().toISOString()
+      }
+    });
+  }
+);
+
 // -------------------------------------------------------------
 // ENDPOINTS DE SECRETARÍA: COBRANZAS Y COMPROBANTES DE TRANSFERENCIA
 // -------------------------------------------------------------
@@ -278,6 +397,129 @@ app.post(
         comprobante_adjunto: comprobanteData,
         operador: req.user.nombre
       }
+    });
+  }
+);
+
+// -------------------------------------------------------------
+// ENDPOINTS DE SECRETARÍA: NOVEDADES Y BAJA DE MATRÍCULA (AUDIT_LOG)
+// -------------------------------------------------------------
+
+/**
+ * POST /api/alumnos/:id/solicitar-baja
+ * Permite a Secretaría iniciar una solicitud formal de baja de matrícula institucional.
+ * Exige motivo obligatorio y registra auditoría inmutable en `audit_log` con:
+ * (id_usuario, id_estudiante, fecha, motivo, estado_previo, estado_nuevo).
+ */
+app.post(
+  '/api/alumnos/:id/solicitar-baja',
+  autenticarToken,
+  requerirRoles(['secretaria', 'admin', 'tesorero']),
+  async (req, res) => {
+    const { id } = req.params;
+    const { motivo, observaciones, documentacion_adjunta, cuotas_pendientes_count, monto_total_deuda } = req.body;
+
+    const motivosValidos = [
+      'Pase a otra institución',
+      'Abandono/Deserción',
+      'Situación socioeconómica',
+      'Otro'
+    ];
+
+    if (!motivo || !motivosValidos.includes(motivo)) {
+      return res.status(400).json({
+        ok: false,
+        error: `Debe seleccionar un motivo válido: ${motivosValidos.join(', ')}.`
+      });
+    }
+
+    if (!observaciones || observaciones.trim().length < 3) {
+      return res.status(400).json({
+        ok: false,
+        error: 'El campo de observaciones o documentación adjunta es obligatorio.'
+      });
+    }
+
+    const estadoPrevio = req.body.estado_previo || 'Regular';
+    const estadoNuevo = 'BAJA_PENDIENTE_APROBACION';
+    const fechaHora = new Date().toISOString();
+
+    // En PostgreSQL relacional:
+    // BEGIN;
+    // 1. UPDATE alumnos SET estado_matricula = 'BAJA_PENDIENTE_APROBACION' WHERE id = $1;
+    // 2. INSERT INTO audit_log (id_usuario, id_estudiante, fecha, motivo, observaciones, estado_previo, estado_nuevo, deuda_pendiente)
+    //    VALUES ($2, $1, NOW(), $3, $4, $5, $6, $7);
+    // 3. INSERT INTO bitacora_auditoria (usuario_id, usuario_cargo, accion, entidad_afectada, entidad_id, detalle)
+    //    VALUES ($2, $req.user.cargo, 'SOLICITUD_BAJA_MATRICULA', 'alumnos', $1, '...');
+    // COMMIT;
+
+    const auditEntry = {
+      id: `AUD-BAJA-${Date.now()}`,
+      id_usuario: req.user.id,
+      id_estudiante: id,
+      usuario_cargo: req.user.cargo,
+      usuario_nombre: req.user.nombre,
+      fecha: fechaHora,
+      motivo,
+      observaciones: observaciones.trim(),
+      documentacion_adjunta: documentacion_adjunta || null,
+      estado_previo: estadoPrevio,
+      estado_nuevo: estadoNuevo,
+      cuotas_pendientes_count: Number(cuotas_pendientes_count) || 0,
+      monto_total_deuda: Number(monto_total_deuda) || 0
+    };
+
+    return res.status(200).json({
+      ok: true,
+      mensaje: `Solicitud de baja para el legajo ${id} registrada correctamente en estado ${estadoNuevo}.`,
+      advertencia_deuda: auditEntry.cuotas_pendientes_count > 0
+        ? `El estudiante posee ${auditEntry.cuotas_pendientes_count} cuotas pendientes por un total de $${auditEntry.monto_total_deuda}. Requiere confirmación de Dirección.`
+        : null,
+      alumno_id: id,
+      nuevo_estado: estadoNuevo,
+      audit_log: auditEntry
+    });
+  }
+);
+
+/**
+ * POST /api/alumnos/:id/aprobar-baja
+ * Exclusivo Dirección / Rectoría / Administración: Resuelve la baja y condonación o derivación de deuda.
+ */
+app.post(
+  '/api/alumnos/:id/aprobar-baja',
+  autenticarToken,
+  requerirRoles(['admin', 'director']),
+  async (req, res) => {
+    const { id } = req.params;
+    const { resolucion_deuda, observaciones_resolucion } = req.body;
+
+    return res.status(200).json({
+      ok: true,
+      mensaje: `Baja de matrícula del estudiante ${id} aprobada por Dirección.`,
+      nuevo_estado: 'Baja',
+      resolucion_deuda: resolucion_deuda || 'Mantiene deuda en gestión de cobranzas',
+      operador: req.user.nombre
+    });
+  }
+);
+
+/**
+ * PUT /api/alumnos/:id
+ * Actualiza legajo y datos académicos del estudiante
+ */
+app.put(
+  '/api/alumnos/:id',
+  autenticarToken,
+  requerirRoles(['secretaria', 'admin']),
+  async (req, res) => {
+    const { id } = req.params;
+    const { nombre, apellido, dni, curso, division, turno } = req.body;
+
+    return res.json({
+      ok: true,
+      mensaje: `Datos del estudiante ${id} actualizados correctamente.`,
+      alumno: { id, nombre, apellido, dni, curso, division, turno }
     });
   }
 );

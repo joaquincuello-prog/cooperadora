@@ -19,6 +19,9 @@
  * - PUT    /api/socios/:id            -> Socio.actualizarDatos()
  * - GET    /api/alumnos               -> Listar Alumnos matriculados
  * - POST   /api/alumnos               -> Secretaria.registrarAlumno() + 10 cuotas automáticas
+ * - PUT    /api/alumnos/:id           -> Actualizar datos de legajo de estudiante
+ * - POST   /api/alumnos/:id/solicitar-baja -> Secretaría: Solicitar baja de matrícula con motivo y auditoría
+ * - POST   /api/alumnos/:id/aprobar-baja   -> Dirección: Aprobar baja y resolución de deuda
  * - GET    /api/cuotas?alumnoId=:id   -> Socio.consultarEstadoCuenta()
  * - POST   /api/cuotas                -> Secretaria.gestionarCuotas() (Arancel extraordinario)
  * - PATCH  /api/cuotas/:id/ajustar    -> Tesorería: Ajuste de cuota con motivo de auditoría (RF-10)
@@ -87,8 +90,26 @@ export const API_ENDPOINTS_CONTRACT = [
   {
     method: 'POST',
     path: '/api/alumnos',
-    description: 'Secretaria.registrarAlumno() — Alta de alumno y generación de 10 cuotas (HU-01)',
+    description: 'Secretaria.registrarAlumno() — Alta de alumno y generación de 10 cuotas automáticas',
     roles: 'Secretaría, Tesorería'
+  },
+  {
+    method: 'PUT',
+    path: '/api/alumnos/:id',
+    description: 'Actualización de legajo, curso y datos identificatorios del estudiante',
+    roles: 'Secretaría, Administrador'
+  },
+  {
+    method: 'POST',
+    path: '/api/alumnos/:id/solicitar-baja',
+    description: 'Secretaría: Inicia solicitud formal de baja de matrícula exigiendo motivo, comprobando deuda y registrando auditoría en audit_log',
+    roles: 'Secretaría, Administrador'
+  },
+  {
+    method: 'POST',
+    path: '/api/alumnos/:id/aprobar-baja',
+    description: 'Dirección / Rectoría: Aprobación definitiva de baja de matrícula y dictamen sobre deuda pendiente',
+    roles: 'Exclusivo Dirección / Administrador'
   },
   {
     method: 'GET',
@@ -127,27 +148,33 @@ export const API_ENDPOINTS_CONTRACT = [
     roles: 'Secretaría, Tesorería'
   },
   {
-    method: 'PUT',
-    path: '/api/pagos/:id',
-    description: 'Modificar pago registrado con motivo obligatorio en auditoría (RF-10, HU-05)',
+    method: 'PATCH',
+    path: '/api/pagos/:id/validar',
+    description: 'Tesorero.validarPago() — Conciliación bancaria y visado de recibo en Tesorería (imputa a Bancos / Cuentas Digitales)',
     roles: 'Exclusivo Tesorería'
   },
   {
     method: 'PATCH',
-    path: '/api/pagos/:id/validar',
-    description: 'Tesorero.validarPago() — Visado y conciliación de recibo en Tesorería',
+    path: '/api/pagos/:id/rechazar-comprobante',
+    description: 'Tesorería: Rechaza comprobante de transferencia con motivo obligatorio, notifica al usuario y emite reverso contable',
     roles: 'Exclusivo Tesorería'
   },
   {
     method: 'PATCH',
     path: '/api/pagos/:id/anular',
-    description: 'Pago.anular() — Anula recibo y revierte cuotas a Pendiente (RF-10, HU-06)',
+    description: 'Pago.anular() — Borrado lógico (estado = ANULADO), registro en audit_log y emisión de reverso contable sin destrucción física (RF-10, HU-06)',
+    roles: 'Exclusivo Tesorería'
+  },
+  {
+    method: 'POST',
+    path: '/api/tesoreria/arqueos',
+    description: 'Tesoreria.registrarArqueoTurno() — Conteo rápido de billetes por denominación contrastado contra el efectivo esperado en caja escolar',
     roles: 'Exclusivo Tesorería'
   },
   {
     method: 'POST',
     path: '/api/tesoreria/egresos',
-    description: 'Registra un gasto/egreso en la tabla TESORERIA',
+    description: 'Registra un gasto/egreso en la tabla TESORERIA discriminando Caja Chica (Efectivo) o Banco',
     roles: 'Exclusivo Tesorería'
   },
   {
@@ -278,19 +305,40 @@ export const cooperadoraApi = {
         };
 
         // Asegurar que todas las cuotas cuenten con array de auditoría de ajustes
-        const cuotasNormalizadas = (parsed.cuotas || initial.cuotas).map((c) => ({
+        let cuotasNormalizadas = (parsed.cuotas || initial.cuotas).map((c) => ({
           ...c,
           historialAjustes: c.historialAjustes || []
         }));
 
-        // Migrar pagos para asegurar estructura de comprobantes adjuntos
-        const pagosNormalizados = (parsed.pagos || initial.pagos).map((p) => {
-          if (p.id === 'REC-2026-002' && !p.comprobanteAdjunto) {
-            const initialRec2 = initial.pagos.find((ip) => ip.id === 'REC-2026-002');
-            return { ...p, comprobanteAdjunto: initialRec2?.comprobanteAdjunto || null };
+        // Migrar pagos para asegurar estructura de comprobantes adjuntos y recibos demostrativos de 3+ cuotas
+        let pagosNormalizados = (parsed.pagos || initial.pagos).map((p) => {
+          if ((p.id === 'REC-2026-002' || p.id === 'REC-2026-006') && !p.comprobanteAdjunto) {
+            const initialRec = initial.pagos.find((ip) => ip.id === p.id);
+            return { ...p, comprobanteAdjunto: initialRec?.comprobanteAdjunto || null };
           }
           return { ...p, comprobanteAdjunto: p.comprobanteAdjunto || null };
         });
+
+        // Asegurar que REC-2026-010 (ejemplo de 5 cuotas consecutivas con Desc. Hermanos -20%) esté disponible
+        const hasRec10 = pagosNormalizados.some((p) => p.id === 'REC-2026-010');
+        const initialRec10 = initial.pagos.find((ip) => ip.id === 'REC-2026-010');
+        if (!hasRec10 && initialRec10) {
+          pagosNormalizados = [initialRec10, ...pagosNormalizados];
+          cuotasNormalizadas = cuotasNormalizadas.map((c) =>
+            initialRec10.cuotaIds.includes(c.id) && c.estado !== 'pagada'
+              ? { ...c, estado: 'pagada', pagoId: 'REC-2026-010' }
+              : c
+          );
+        }
+
+        const tesoreriaNormalizada = {
+          ...initial.tesoreria,
+          ...(parsed.tesoreria || {}),
+          saldoInicialEfectivo: parsed.tesoreria?.saldoInicialEfectivo ?? initial.tesoreria.saldoInicialEfectivo,
+          saldoInicialBanco: parsed.tesoreria?.saldoInicialBanco ?? initial.tesoreria.saldoInicialBanco,
+          arqueos: parsed.tesoreria?.arqueos || initial.tesoreria.arqueos || [],
+          reversosContables: parsed.tesoreria?.reversosContables || []
+        };
 
         return {
           ...initial,
@@ -298,7 +346,7 @@ export const cooperadoraApi = {
           cooperadora: cooperadoraActualizada,
           cuotas: cuotasNormalizadas,
           pagos: pagosNormalizados,
-          tesoreria: { ...initial.tesoreria, ...(parsed.tesoreria || {}) }
+          tesoreria: tesoreriaNormalizada
         };
       } catch (e) {
         console.error('Error parseando estado local, restableciendo a mock inicial:', e);

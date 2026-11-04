@@ -207,11 +207,11 @@ export default function ReciboModal() {
               <div>
                 <strong>Estado Fiscal:</strong>{' '}
                 <span className="font-bold uppercase text-[11px]">
-                  {pago.estado === 'anulado'
-                    ? 'ANULADO POR TESORERÍA'
+                  {String(pago.estado || '').toUpperCase() === 'ANULADO'
+                    ? `ANULADO POR TESORERÍA${pago.reversoContableId ? ` (REVERSO: ${pago.reversoContableId})` : ''}`
                     : pago.validadoTesoreria
-                    ? 'VÁLIDO — VISADO Y AUDITADO POR TESORERÍA'
-                    : 'VÁLIDO — EMISIÓN DE SECRETARÍA'}
+                    ? 'VÁLIDO — VISADO Y CONCILIADO POR TESORERÍA'
+                    : 'VÁLIDO — EMISIÓN DE SECRETARÍA (PEND. VISADO)'}
                 </span>
               </div>
               {pago.observaciones && (

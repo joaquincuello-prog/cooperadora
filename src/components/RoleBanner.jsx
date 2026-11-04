@@ -9,32 +9,32 @@ export default function RoleBanner() {
     secretaria: {
       bg: 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-950 dark:text-emerald-200',
       dot: 'bg-emerald-600 dark:bg-emerald-400',
-      title: 'Secretaría (Operativo Diario)',
-      desc: 'Casos de Uso habilitados: Registrar alumnos (HU-01), Registrar socio/tutor, Gestionar cuotas, Registrar pagos (HU-02), Aplicar descuento automático por hermanos (HU-04) y Consultar deudas (HU-03).'
+      title: 'Secretaría Institucional',
+      desc: 'Gestión de legajos de estudiantes, padrón de socios tutores, cobranzas institucionales y estado de cuenta.'
     },
     tesorero: {
       bg: 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800/60 text-amber-950 dark:text-amber-200',
       dot: 'bg-amber-600 dark:bg-amber-400',
       title: 'Tesorería (Fiscalización y Auditoría)',
-      desc: 'Casos de Uso habilitados: Ajuste de cuotas con motivo obligatorio en auditoría, conciliación y validación de transferencias con comprobante, rectificación/anulación de pagos, arqueo de caja y cierres de período.'
+      desc: 'Conciliación contable, ajustes de aranceles auditados, validación de transferencias y cierres de período.'
     },
     admin: {
       bg: 'bg-purple-50/90 dark:bg-purple-950/40 border-purple-300 dark:border-purple-800/60 text-purple-950 dark:text-purple-200',
       dot: 'bg-purple-600 dark:bg-purple-400',
       title: 'Administrador Institucional / Rectoría',
-      desc: 'Supervisión ejecutiva integral, gestión de usuarios y roles RBAC, auditoría global y reportes de recaudación.'
+      desc: 'Supervisión ejecutiva integral, gestión de usuarios, perfiles de acceso y reportes de recaudación.'
     },
     director: {
       bg: 'bg-sky-50/90 dark:bg-sky-950/40 border-sky-300 dark:border-sky-800/60 text-sky-950 dark:text-sky-200',
       dot: 'bg-sky-600 dark:bg-sky-400',
-      title: 'Director Institucional (Modo Consulta Ejecutiva — HU-09)',
-      desc: 'Casos de Uso habilitados: Consultar reportes generales de recaudación, evolución de cobranza por curso y estado financiero de la cooperadora (sin permisos de escritura).'
+      title: 'Director Institucional (Consulta Ejecutiva)',
+      desc: 'Monitoreo de reportes de recaudación, evolución de cobranza por curso y estado financiero institucional.'
     },
     tutor: {
       bg: 'bg-indigo-50/90 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-800/60 text-indigo-950 dark:text-indigo-200',
       dot: 'bg-indigo-600 dark:bg-indigo-400',
-      title: 'Padre / Tutor (Socio de Cooperadora — HU-08)',
-      desc: 'Casos de Uso habilitados: Consultar estados de cuotas de sus hijos representados (consultarEstadoCuenta) y Obtener comprobantes oficiales de pago en PDF/Impresión.'
+      title: 'Padre / Tutor (Socio de Cooperadora)',
+      desc: 'Consulta de estados de cuenta de los representados y comprobantes oficiales de pago.'
     }
   };
 

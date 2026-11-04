@@ -98,11 +98,40 @@ CREATE TABLE IF NOT EXISTS pagos (
     monto_total DECIMAL(12,2) NOT NULL,
     medio_pago VARCHAR(30) NOT NULL CHECK (medio_pago IN ('Efectivo', 'Transferencia', 'Mercado Pago')),
     referencia_comprobante VARCHAR(100) NOT NULL,
-    estado VARCHAR(20) NOT NULL DEFAULT 'valido' CHECK (estado IN ('valido', 'anulado')),
+    estado VARCHAR(20) NOT NULL DEFAULT 'valido' CHECK (estado IN ('valido', 'anulado', 'ANULADO')),
     validado_tesoreria BOOLEAN NOT NULL DEFAULT FALSE,
     fecha_pago DATE NOT NULL DEFAULT CURRENT_DATE,
     operador_id INT NOT NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
     motivo_anulacion TEXT,
+    reverso_contable_id VARCHAR(30),
+    observaciones TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 7b. TABLA DE REVERSOS CONTABLES POR ANULACIÓN LÓGICA DE RECIBOS
+CREATE TABLE IF NOT EXISTS reversos_contables (
+    id SERIAL PRIMARY KEY,
+    reverso_codigo VARCHAR(30) NOT NULL UNIQUE, -- Ej: 'REV-2026-001'
+    pago_id INT NOT NULL REFERENCES pagos(id) ON DELETE RESTRICT,
+    usuario_id INT NOT NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
+    monto_reverso DECIMAL(12,2) NOT NULL,      -- Importe negativo de contra-asiento
+    medio_afectado VARCHAR(30) NOT NULL,       -- 'Efectivo' (Caja Escolar) o 'Transferencia' (Bancos)
+    motivo_tipificado VARCHAR(80) NOT NULL CHECK (motivo_tipificado IN ('Error de imputación', 'Transferencia no acreditada', 'Duplicado', 'Transferencia no acreditada / Comprobante rechazado')),
+    detalle_adicional TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 7c. TABLA DE ARQUEOS DE TURNO Y CONTEO FÍSICO DE CAJA ESCOLAR
+CREATE TABLE IF NOT EXISTS arqueos_caja (
+    id SERIAL PRIMARY KEY,
+    arqueo_codigo VARCHAR(30) NOT NULL UNIQUE, -- Ej: 'ARQ-2026-001'
+    usuario_id INT NOT NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
+    turno VARCHAR(30) NOT NULL,
+    efectivo_esperado DECIMAL(12,2) NOT NULL,
+    efectivo_contado DECIMAL(12,2) NOT NULL,
+    diferencia DECIMAL(12,2) NOT NULL,
+    estado_arqueo VARCHAR(20) NOT NULL CHECK (estado_arqueo IN ('CUADRADO', 'FALTANTE', 'SOBRANTE')),
+    desglose_billetes_json TEXT NOT NULL,
     observaciones TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -121,12 +150,12 @@ CREATE TABLE IF NOT EXISTS comprobantes_adjuntos (
     fecha_subida TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 9. TABLA DE AUDITORÍA GENERAL DEL SISTEMA (RNF-02)
+-- 9. TABLA DE AUDITORÍA GENERAL DEL SISTEMA
 CREATE TABLE IF NOT EXISTS bitacora_auditoria (
     id SERIAL PRIMARY KEY,
     usuario_id INT REFERENCES usuarios(id) ON DELETE SET NULL,
     usuario_cargo VARCHAR(100) NOT NULL,
-    accion VARCHAR(50) NOT NULL,       -- Ej: 'INICIO_SESION_JWT', 'AJUSTE_CUOTA_AUDITORIA', 'COBRO_REGISTRADO'
+    accion VARCHAR(50) NOT NULL,       -- Ej: 'INICIO_SESION_JWT', 'AJUSTE_CUOTA_AUDITORIA', 'COBRO_REGISTRADO', 'SOLICITUD_BAJA_MATRICULA'
     entidad_afectada VARCHAR(50),
     entidad_id VARCHAR(50),
     detalle TEXT NOT NULL,
@@ -134,10 +163,24 @@ CREATE TABLE IF NOT EXISTS bitacora_auditoria (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 10. ÍNDICES DE ALTO RENDIMIENTO PARA BÚSQUEDAS PREDICTIVAS
+-- 10. TABLA DE AUDITORÍA ESPECÍFICA DE NOVEDADES Y BAJA DE MATRÍCULAS (audit_log)
+CREATE TABLE IF NOT EXISTS audit_log (
+    id SERIAL PRIMARY KEY,
+    id_usuario INT REFERENCES usuarios(id) ON DELETE SET NULL,
+    id_estudiante INT NOT NULL REFERENCES alumnos(id) ON DELETE CASCADE,
+    fecha TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    motivo VARCHAR(255) NOT NULL,
+    observaciones TEXT,
+    estado_previo VARCHAR(40) NOT NULL,
+    estado_nuevo VARCHAR(40) NOT NULL,
+    deuda_pendiente DECIMAL(12,2) DEFAULT 0.00
+);
+
+-- 11. ÍNDICES DE ALTO RENDIMIENTO PARA BÚSQUEDAS PREDICTIVAS
 CREATE INDEX IF NOT EXISTS idx_alumnos_busqueda ON alumnos(apellido, nombre, dni);
 CREATE INDEX IF NOT EXISTS idx_socios_dni ON socios_tutores(dni);
 CREATE INDEX IF NOT EXISTS idx_cuotas_alumno_estado ON cuotas(alumno_id, estado);
 CREATE INDEX IF NOT EXISTS idx_pagos_alumno ON pagos(alumno_id);
 CREATE INDEX IF NOT EXISTS idx_pagos_recibo ON pagos(recibo_codigo);
 CREATE INDEX IF NOT EXISTS idx_comprobantes_pago ON comprobantes_adjuntos(pago_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_estudiante ON audit_log(id_estudiante);

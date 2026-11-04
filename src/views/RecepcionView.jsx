@@ -350,7 +350,7 @@ export default function RecepcionView() {
                       ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-300'
                       : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
                   }`}>
-                    <span className="text-[10px] font-bold uppercase block">Beneficio Familiar (RF-05)</span>
+                    <span className="text-[10px] font-bold uppercase block">Beneficio Familiar (Bonificación Hermanos)</span>
                     <p className="font-bold">
                       {aplicaDesc ? '20% Descuento Activo' : 'Tarifa Plena (Sin Hnos)'}
                     </p>

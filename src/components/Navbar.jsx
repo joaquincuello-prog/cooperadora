@@ -49,8 +49,8 @@ export default function Navbar() {
   const rolePermissions = {
     secretaria: ['recepcion', 'padron'],
     tesorero: ['tesoreria', 'recepcion'],
-    admin: ['reportes', 'tesoreria', 'padron'],
-    director: ['reportes', 'tesoreria', 'padron'],
+    admin: ['reportes', 'tesoreria', 'padron', 'recepcion'],
+    director: ['reportes', 'tesoreria'],
     tutor: ['portalTutor']
   };
 
@@ -63,7 +63,7 @@ export default function Navbar() {
     },
     {
       id: 'padron',
-      label: 'Padrón Alumnos y Socios',
+      label: 'Padrón Estudiantes y Tutores',
       icon: 'fa-id-card',
       roles: ['secretaria', 'admin']
     },
@@ -321,6 +321,16 @@ export default function Navbar() {
                 </div>
               )}
             </div>
+
+            {/* Botón Cerrar Sesión Directo y Visible */}
+            <button
+              onClick={cerrarSesion}
+              title="Cerrar sesión y volver al Portal de Bienvenida"
+              className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs"
+            >
+              <i className="fa-solid fa-right-from-bracket text-rose-600 dark:text-rose-400"></i>
+              <span className="hidden sm:inline">Cerrar Sesión</span>
+            </button>
 
           </div>
         </div>

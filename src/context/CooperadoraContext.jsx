@@ -11,16 +11,67 @@ import {
 const CooperadoraContext = createContext(null);
 
 export function CooperadoraProvider({ children }) {
-  const [state, setState] = useState(() => cooperadoraApi.loadState());
-  const [activeTab, setActiveTab] = useState('recepcion');
+  // Sesión segura basada en Tokens JWT
+  const [sessionToken, setSessionToken] = useState(() => {
+    const token = authService.getToken();
+    if (token) {
+      const res = authService.verifyToken(token);
+      if (res.valid) return token;
+      authService.removeToken();
+    }
+    return null;
+  });
+
+  const [state, setState] = useState(() => {
+    const loaded = cooperadoraApi.loadState();
+    const token = authService.getToken();
+    if (token) {
+      const res = authService.verifyToken(token);
+      if (res.valid && res.payload) {
+        const matchingUser = USUARIOS_SISTEMA.find((u) => u.id === res.payload.sub) || {
+          id: res.payload.sub,
+          username: res.payload.username,
+          nombre: res.payload.nombre,
+          email: res.payload.email,
+          rol: res.payload.rol,
+          cargo: res.payload.cargo,
+          tutorId: res.payload.tutorId
+        };
+        return {
+          ...loaded,
+          role: matchingUser.rol,
+          currentUser: matchingUser,
+          selectedTutorPortalId: matchingUser.tutorId || loaded.selectedTutorPortalId
+        };
+      }
+    }
+    // Sin sesión activa
+    return {
+      ...loaded,
+      role: null,
+      currentUser: null
+    };
+  });
+
+  const [activeTab, setActiveTab] = useState(() => {
+    const token = authService.getToken();
+    if (token) {
+      const res = authService.verifyToken(token);
+      if (res.valid && res.payload) {
+        if (res.payload.rol === 'tesorero') return 'tesoreria';
+        if (res.payload.rol === 'admin' || res.payload.rol === 'director') return 'reportes';
+        if (res.payload.rol === 'tutor') return 'portalTutor';
+        return 'recepcion';
+      }
+    }
+    return 'recepcion';
+  });
+
   const [selectedCuotaIds, setSelectedCuotaIds] = useState([]);
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('cooperadora_theme_pref') || 'light';
   });
   const [toast, setToast] = useState(null);
-
-  // Sesión segura basada en Tokens JWT
-  const [sessionToken, setSessionToken] = useState(() => authService.getToken());
 
   // Modales globales
   const [activeReciboId, setActiveReciboId] = useState(null);
@@ -42,6 +93,7 @@ export function CooperadoraProvider({ children }) {
       } else {
         authService.removeToken();
         setSessionToken(null);
+        setState((prev) => ({ ...prev, currentUser: null, role: null }));
       }
     }
   }, []);
@@ -168,6 +220,8 @@ export function CooperadoraProvider({ children }) {
     setSessionToken(null);
     setState((prev) => ({
       ...prev,
+      role: null,
+      currentUser: null,
       auditLogs: [
         createAuditEntry(
           user?.cargo || 'Usuario',
@@ -177,8 +231,8 @@ export function CooperadoraProvider({ children }) {
         ...prev.auditLogs
       ]
     }));
-    showToast('Sesión finalizada correctamente.', 'info');
-    setIsLoginModalOpen(true);
+    setIsLoginModalOpen(false);
+    showToast('Sesión finalizada correctamente. Redirigiendo a la bienvenida.', 'info');
   };
 
   // --- SELECTORES Y REGLAS DE NEGOCIO ---
@@ -501,7 +555,8 @@ export function CooperadoraProvider({ children }) {
       curso: alumnoData.curso,
       division: alumnoData.division,
       turno: alumnoData.turno,
-      tutorId: targetTutorId
+      tutorId: targetTutorId,
+      estado_matricula: 'Regular'
     };
 
     const nuevasCuotas = MESES_CICLO.map((mes) => ({
@@ -582,6 +637,183 @@ export function CooperadoraProvider({ children }) {
       }));
       showToast(`Nuevo socio/tutor registrado: ${nuevoSocio.apellido}, ${nuevoSocio.nombre}`, 'success');
     }
+  };
+
+  // 6b. Editar datos de legajo de estudiante
+  const editarAlumno = ({ studentId, alumnoData }) => {
+    const student = getStudent(studentId);
+    if (!student) return false;
+
+    setState((prev) => ({
+      ...prev,
+      alumnos: prev.alumnos.map((a) =>
+        a.id === studentId
+          ? {
+              ...a,
+              nombre: alumnoData.nombre.trim(),
+              apellido: alumnoData.apellido.trim(),
+              dni: alumnoData.dni.trim(),
+              curso: alumnoData.curso,
+              division: alumnoData.division,
+              turno: alumnoData.turno
+            }
+          : a
+      ),
+      auditLogs: [
+        {
+          id: `AUD-${Date.now()}`,
+          timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16),
+          fecha: new Date().toISOString(),
+          id_usuario: prev.currentUser?.id || 1,
+          usuario: prev.currentUser?.cargo || (prev.role === 'tesorero' ? 'Tesorería' : 'Secretaría'),
+          id_estudiante: studentId,
+          accion: 'ALUMNO_ACTUALIZADO',
+          motivo: 'Actualización de datos académicos o personales',
+          estado_previo: student.estado_matricula || 'Regular',
+          estado_nuevo: student.estado_matricula || 'Regular',
+          detalle: `Actualización de legajo de ${student.apellido}, ${student.nombre} (DNI ${student.dni}). Curso: ${alumnoData.curso} "${alumnoData.division}" - Turno ${alumnoData.turno}.`
+        },
+        ...prev.auditLogs
+      ]
+    }));
+
+    showToast(`Legajo de ${alumnoData.nombre} ${alumnoData.apellido} actualizado.`, 'success');
+    return true;
+  };
+
+  // 6c. Gestionar Vínculo Familiar
+  const cambiarTutorAlumno = ({ studentId, nuevoTutorId }) => {
+    const student = getStudent(studentId);
+    const tutorNuevo = getTutor(nuevoTutorId);
+    if (!student || !tutorNuevo) return false;
+
+    const tutorAnterior = getTutor(student.tutorId);
+
+    setState((prev) => ({
+      ...prev,
+      alumnos: prev.alumnos.map((a) =>
+        a.id === studentId ? { ...a, tutorId: nuevoTutorId } : a
+      ),
+      auditLogs: [
+        {
+          id: `AUD-${Date.now()}`,
+          timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16),
+          fecha: new Date().toISOString(),
+          id_usuario: prev.currentUser?.id || 1,
+          usuario: prev.currentUser?.cargo || (prev.role === 'tesorero' ? 'Tesorería' : 'Secretaría'),
+          id_estudiante: studentId,
+          accion: 'VINCULO_FAMILIAR_ACTUALIZADO',
+          motivo: 'Cambio o reasignación de socio tutor',
+          estado_previo: student.estado_matricula || 'Regular',
+          estado_nuevo: student.estado_matricula || 'Regular',
+          detalle: `Reasignación familiar para ${student.apellido}, ${student.nombre}. Tutor previo: ${tutorAnterior ? `${tutorAnterior.apellido}, ${tutorAnterior.nombre}` : 'Sin tutor'} -> Nuevo Tutor: ${tutorNuevo.apellido}, ${tutorNuevo.nombre} (DNI ${tutorNuevo.dni}).`
+        },
+        ...prev.auditLogs
+      ]
+    }));
+
+    showToast(`Vínculo familiar actualizado a ${tutorNuevo.apellido}, ${tutorNuevo.nombre}.`, 'success');
+    return true;
+  };
+
+  // 6d. Solicitar Baja de Matrícula (Secretaría)
+  const solicitarBajaMatricula = ({ studentId, motivo, observaciones, documentacionAdjunta }) => {
+    const student = getStudent(studentId);
+    if (!student) {
+      showToast('No se encontró el legajo del estudiante.', 'warning');
+      return { ok: false, error: 'Estudiante no encontrado' };
+    }
+
+    const cuotas = getStudentCuotas(studentId);
+    const cuotasPendientes = cuotas.filter((c) => c.estado === 'pendiente' || c.estado === 'vencida');
+    const totalDeuda = cuotasPendientes.reduce((acc, c) => acc + c.monto, 0);
+
+    const prevEstado = student.estado_matricula || 'Regular';
+    const nuevoEstado = 'BAJA_PENDIENTE_APROBACION';
+    const fechaISO = new Date().toISOString();
+    const dateFormatted = fechaISO.replace('T', ' ').slice(0, 16);
+    const usuarioActual = state.currentUser || { id: 1, cargo: 'Secretaría Institucional', nombre: 'Secretaría' };
+
+    const auditRecord = {
+      id: `AUD-BAJA-${Date.now()}`,
+      id_usuario: usuarioActual.id,
+      id_estudiante: studentId,
+      fecha: fechaISO,
+      timestamp: dateFormatted,
+      usuario: usuarioActual.cargo || usuarioActual.nombre,
+      accion: 'SOLICITUD_BAJA_MATRICULA',
+      motivo: (motivo || '').trim(),
+      observaciones: (observaciones || '').trim(),
+      documentacion: documentacionAdjunta || 'Sin archivo adjunto',
+      estado_previo: prevEstado,
+      estado_nuevo: nuevoEstado,
+      cuotas_pendientes_count: cuotasPendientes.length,
+      total_deuda: totalDeuda,
+      detalle: `Solicitud de Baja de Matrícula para ${student.apellido}, ${student.nombre} (DNI ${student.dni}). Motivo: "${motivo}". Observaciones: "${observaciones || 'N/A'}". Estado: ${prevEstado} -> ${nuevoEstado}.${cuotasPendientes.length > 0 ? ` Registra ${cuotasPendientes.length} cuotas pendientes ($${totalDeuda.toLocaleString('es-AR')}) pendientes de resolución por Dirección.` : ' Sin deudas pendientes.'}`
+    };
+
+    setState((prev) => ({
+      ...prev,
+      alumnos: prev.alumnos.map((a) =>
+        a.id === studentId ? { ...a, estado_matricula: nuevoEstado } : a
+      ),
+      auditLogs: [auditRecord, ...prev.auditLogs]
+    }));
+
+    showToast(`Solicitud de baja asentada para ${student.nombre} ${student.apellido}. Estado: ${nuevoEstado}.`, 'info');
+    return {
+      ok: true,
+      nuevoEstado,
+      cuotasPendientesCount: cuotasPendientes.length,
+      totalDeuda,
+      auditRecord
+    };
+  };
+
+  // 6e. Aprobar / Efectivizar Baja de Matrícula (Dirección / Administración)
+  const aprobarBajaMatricula = ({ studentId, resolucionDeuda = 'condonar', observaciones = '' }) => {
+    const student = getStudent(studentId);
+    if (!student) return { ok: false };
+
+    const prevEstado = student.estado_matricula || 'BAJA_PENDIENTE_APROBACION';
+    const nuevoEstado = 'Baja';
+    const fechaISO = new Date().toISOString();
+    const dateFormatted = fechaISO.replace('T', ' ').slice(0, 16);
+    const usuarioActual = state.currentUser || { id: 3, cargo: 'Dirección / Rectoría', nombre: 'Dirección' };
+
+    setState((prev) => ({
+      ...prev,
+      alumnos: prev.alumnos.map((a) =>
+        a.id === studentId ? { ...a, estado_matricula: nuevoEstado } : a
+      ),
+      cuotas: resolucionDeuda === 'condonar'
+        ? prev.cuotas.map((c) =>
+            c.alumnoId === studentId && (c.estado === 'pendiente' || c.estado === 'vencida')
+              ? { ...c, estado: 'eximida', concepto: `${c.concepto} (Condonada por Baja)` }
+              : c
+          )
+        : prev.cuotas,
+      auditLogs: [
+        {
+          id: `AUD-BAJA-CONF-${Date.now()}`,
+          id_usuario: usuarioActual.id,
+          id_estudiante: studentId,
+          fecha: fechaISO,
+          timestamp: dateFormatted,
+          usuario: usuarioActual.cargo || usuarioActual.nombre,
+          accion: 'BAJA_MATRICULA_APROBADA',
+          motivo: `Aprobación de baja institucional. Resolución: ${resolucionDeuda === 'condonar' ? 'Condonación de deuda autorizada' : 'Deuda en gestión de cobranzas'}`,
+          observaciones: observaciones || '',
+          estado_previo: prevEstado,
+          estado_nuevo: nuevoEstado,
+          detalle: `Baja definitiva aprobada para ${student.apellido}, ${student.nombre}. Resolución: ${resolucionDeuda === 'condonar' ? 'Cuotas impagas eximidas / condonadas' : 'Deuda activa transferida a cobranza extrajudicial'}. Dictaminado por ${usuarioActual.cargo}.`
+        },
+        ...prev.auditLogs
+      ]
+    }));
+
+    showToast(`Baja definitiva del legajo ${student.apellido}, ${student.nombre} aprobada.`, 'success');
+    return { ok: true };
   };
 
   // 7. Secretaria.gestionarCuotas() — Cargo extraordinario
@@ -668,65 +900,235 @@ export function CooperadoraProvider({ children }) {
     return true;
   };
 
-  // 9. Tesorería: Anular Pago revirtiendo cuotas
-  const anularPago = ({ id, motivo }) => {
+  // 9. Tesorería: Anular Pago mediante borrado lógico (estado = 'ANULADO'), audit_log y Reverso Contable
+  const anularPago = ({ id, motivo, motivoCategoria, detalleAdicional }) => {
     if (state.role !== 'tesorero' && state.role !== 'admin') {
-      showToast('Acceso denegado: Solo Tesorería puede anular pagos.', 'warning');
-      return false;
+      showToast('Acceso denegado: Solo Tesorería puede anular recibos oficiales.', 'warning');
+      return { ok: false, error: 'Permisos insuficientes' };
     }
 
     const pago = state.pagos.find((p) => p.id === id);
-    if (!pago) return false;
+    if (!pago) return { ok: false, error: 'Recibo no encontrado' };
+
+    const motivoFinal = motivoCategoria
+      ? `${motivoCategoria}${detalleAdicional?.trim() ? ` — ${detalleAdicional.trim()}` : ''}`
+      : (motivo || '').trim();
+
+    if (!motivoFinal) {
+      showToast('Debe seleccionar o indicar obligatoriamente un motivo de anulación.', 'warning');
+      return { ok: false, error: 'Motivo obligatorio' };
+    }
+
+    const fechaISO = new Date().toISOString();
+    const dateFormatted = fechaISO.replace('T', ' ').slice(0, 16);
+    const operadorActual = state.currentUser?.cargo || `Tesorería (${state.currentUser?.nombre || 'Marta Rodríguez'})`;
+    const reversoId = `REV-2026-${((state.tesoreria?.reversosContables?.length || 0) + 1).toString().padStart(3, '0')}`;
+
+    const asientoReverso = {
+      id: reversoId,
+      pagoId: pago.id,
+      alumnoId: pago.alumnoId,
+      fecha: dateFormatted,
+      medio: pago.medio,
+      montoReverso: -Math.abs(pago.montoTotal),
+      motivo: motivoFinal,
+      operador: operadorActual,
+      cuotasRevertidas: pago.cuotaIds
+    };
+
+    const auditEntry = {
+      id: `AUD-ANU-${Date.now()}`,
+      id_usuario: state.currentUser?.id || 2,
+      id_estudiante: pago.alumnoId,
+      recibo_id: pago.id,
+      reverso_id: reversoId,
+      fecha: fechaISO,
+      timestamp: dateFormatted,
+      usuario: operadorActual,
+      accion: 'ANULACION_RECIBO_Y_REVERSO_CONTABLE',
+      motivo: motivoFinal,
+      estado_previo: pago.estado || 'valido',
+      estado_nuevo: 'ANULADO',
+      detalle: `Borrado lógico de recibo ${id} (estado = 'ANULADO'). Reverso contable emitido: ${reversoId} por -$${pago.montoTotal.toLocaleString('es-AR')} (${pago.medio}). ${pago.cuotaIds.length} cuota(s) revertida(s) a Pendiente. Motivo auditado: "${motivoFinal}".`
+    };
 
     setState((prev) => ({
       ...prev,
       pagos: prev.pagos.map((p) =>
-        p.id === id ? { ...p, estado: 'anulado', motivoAnulacion: motivo } : p
+        p.id === id
+          ? {
+              ...p,
+              estado: 'ANULADO',
+              validadoTesoreria: false,
+              motivoAnulacion: motivoFinal,
+              fechaAnulacion: dateFormatted,
+              anuladoPor: operadorActual,
+              reversoContableId: reversoId,
+              reversoContableMonto: -Math.abs(p.montoTotal)
+            }
+          : p
       ),
       cuotas: prev.cuotas.map((c) =>
         pago.cuotaIds.includes(c.id)
           ? { ...c, estado: 'pendiente', pagoId: null }
           : c
       ),
-      auditLogs: [
-        createAuditEntry(
-          'Tesorería',
-          'PAGO_ANULADO',
-          `Recibo ${id} ANULADO. Cuotas revertidas a Pendiente. Motivo obligatorio: "${motivo}".`
-        ),
-        ...prev.auditLogs
-      ]
+      tesoreria: {
+        ...prev.tesoreria,
+        reversosContables: [asientoReverso, ...(prev.tesoreria?.reversosContables || [])]
+      },
+      auditLogs: [auditEntry, ...prev.auditLogs]
     }));
 
-    showToast(`Recibo ${id} anulado. Cuotas revertidas a Pendientes.`, 'warning');
-    return true;
+    showToast(`Recibo ${id} ANULADO. Reverso contable ${reversoId} emitido y cuotas revertidas.`, 'warning');
+    return { ok: true, reversoId, auditEntry };
   };
 
-  // 10. Tesorero.validarPago()
-  const validarPagoTesoreria = (pagoId) => {
+  // 10. Tesorero.validarPago() — Conciliación Bancaria e Imputación a Bancos / Caja
+  const validarPagoTesoreria = (pagoId, observacionesConciliacion = '') => {
     if (state.role !== 'tesorero' && state.role !== 'admin') {
-      showToast('Solo Tesorería puede visar asientos contables.', 'warning');
-      return;
+      showToast('Solo Tesorería puede visar y conciliar asientos contables.', 'warning');
+      return { ok: false };
     }
+
+    const pago = state.pagos.find((p) => p.id === pagoId);
+    if (!pago) return { ok: false };
+
+    const fechaISO = new Date().toISOString();
+    const dateFormatted = fechaISO.replace('T', ' ').slice(0, 16);
+    const operadorActual = state.currentUser?.cargo || `Tesorería (${state.currentUser?.nombre || 'Marta Rodríguez'})`;
+    const destinoFondo = pago.medio === 'Efectivo' ? 'Efectivo en Caja Escolar' : 'Bancos / Cuentas Digitales';
+
     setState((prev) => ({
       ...prev,
       pagos: prev.pagos.map((p) =>
-        p.id === pagoId ? { ...p, validadoTesoreria: true } : p
+        p.id === pagoId
+          ? {
+              ...p,
+              estado: 'valido',
+              validadoTesoreria: true,
+              fechaConciliacion: dateFormatted,
+              conciliadoPor: operadorActual,
+              observaciones: observacionesConciliacion
+                ? `${p.observaciones ? p.observaciones + ' • ' : ''}[Conciliado: ${observacionesConciliacion}]`
+                : p.observaciones
+            }
+          : p
       ),
+      auditLogs: [
+        {
+          id: `AUD-CONC-${Date.now()}`,
+          id_usuario: prev.currentUser?.id || 2,
+          id_estudiante: pago.alumnoId,
+          recibo_id: pagoId,
+          fecha: fechaISO,
+          timestamp: dateFormatted,
+          usuario: operadorActual,
+          accion: pago.medio === 'Efectivo' ? 'PAGO_VISADO_CAJA' : 'CONCILIACION_BANCARIA_APROBADA',
+          motivo: observacionesConciliacion || 'Verificación exitosa de comprobante y extracto',
+          estado_previo: 'Pend. Visado',
+          estado_nuevo: 'Validado',
+          detalle: `Recibo ${pagoId} ($${pago.montoTotal.toLocaleString('es-AR')} - ${pago.medio} Ref: ${pago.comprobante}) visado y conciliado en Tesorería. Fondos imputados a: ${destinoFondo}.`
+        },
+        ...prev.auditLogs
+      ]
+    }));
+
+    showToast(`Recibo ${pagoId} conciliado e imputado a ${destinoFondo}.`, 'success');
+    return { ok: true };
+  };
+
+  // 10b. Tesorería: Rechazar Comprobante Bancario en Modal Split-View
+  const rechazarComprobanteTesoreria = ({ pagoId, motivoRechazo }) => {
+    if (state.role !== 'tesorero' && state.role !== 'admin') {
+      showToast('Solo Tesorería puede rechazar comprobantes bancarios.', 'warning');
+      return { ok: false, error: 'Permisos insuficientes' };
+    }
+
+    if (!motivoRechazo || !motivoRechazo.trim()) {
+      showToast('Debe indicar el motivo del rechazo del comprobante al usuario.', 'warning');
+      return { ok: false, error: 'Motivo de rechazo obligatorio' };
+    }
+
+    return anularPago({
+      id: pagoId,
+      motivoCategoria: 'Transferencia no acreditada / Comprobante rechazado',
+      detalleAdicional: motivoRechazo.trim()
+    });
+  };
+
+  // 10c. Tesorería: Arqueo de Turno / Conteo Rápido de Billetes Físicos
+  const registrarArqueoCaja = ({
+    turno = 'Actual',
+    conteoBilletes,
+    otrosValores = 0,
+    efectivoContado,
+    efectivoEsperado,
+    diferencia,
+    observaciones = ''
+  }) => {
+    if (state.role !== 'tesorero' && state.role !== 'admin') {
+      showToast('Solo Tesorería puede registrar actas de arqueo de caja.', 'warning');
+      return { ok: false };
+    }
+
+    const fechaHora = new Date().toISOString().replace('T', ' ').slice(0, 16);
+    const nextNum = (state.tesoreria?.arqueos?.length || 0) + 1;
+    const arqueoId = `ARQ-2026-${nextNum.toString().padStart(3, '0')}`;
+    const estadoArqueo =
+      diferencia === 0 ? 'CUADRADO' : diferencia < 0 ? 'FALTANTE' : 'SOBRANTE';
+    const responsable = `${state.currentUser?.nombre || 'Marta Rodríguez'} (${state.currentUser?.cargo || 'Tesorería'})`;
+
+    const nuevoArqueo = {
+      id: arqueoId,
+      fecha: fechaHora,
+      turno,
+      responsable,
+      conteoBilletes,
+      otrosValores: Number(otrosValores) || 0,
+      efectivoEsperado: Number(efectivoEsperado),
+      efectivoContado: Number(efectivoContado),
+      diferencia: Number(diferencia),
+      estado: estadoArqueo,
+      observaciones: observaciones.trim() || `Arqueo de turno ${estadoArqueo}`
+    };
+
+    setState((prev) => ({
+      ...prev,
+      tesoreria: {
+        ...prev.tesoreria,
+        arqueos: [nuevoArqueo, ...(prev.tesoreria?.arqueos || [])]
+      },
       auditLogs: [
         createAuditEntry(
           'Tesorería',
-          'PAGO_VALIDADO',
-          `Recibo ${pagoId} visado y conciliado en Tesorería.`
+          'ARQUEO_CAJA_TURNO',
+          `Acta de Arqueo ${arqueoId} (${estadoArqueo}). Efectivo esperado en sistema: $${Number(efectivoEsperado).toLocaleString('es-AR')} | Conteo físico de billetes: $${Number(efectivoContado).toLocaleString('es-AR')} | Diferencia: ${diferencia >= 0 ? '+' : ''}$${Number(diferencia).toLocaleString('es-AR')}.${observaciones ? ` Obs: "${observaciones.trim()}"` : ''}`
         ),
         ...prev.auditLogs
       ]
     }));
-    showToast(`Recibo ${pagoId} validado por Tesorería.`, 'success');
+
+    showToast(
+      `Arqueo ${arqueoId} registrado (${estadoArqueo}).`,
+      diferencia === 0 ? 'success' : 'warning'
+    );
+    return { ok: true, arqueo: nuevoArqueo };
+  };
+
+  // 10d. Sincronizar Período Fiscal Activo
+  const cambiarPeriodoFiscalTesoreria = (nuevoPeriodo) => {
+    setState((prev) => ({
+      ...prev,
+      tesoreria: {
+        ...prev.tesoreria,
+        periodoActual: nuevoPeriodo
+      }
+    }));
   };
 
   // 11. Tesoreria: Registrar Egreso y cerrarPeriodo()
-  const registrarEgresoTesoreria = ({ concepto, categoria, importe, comprobante, fecha }) => {
+  const registrarEgresoTesoreria = ({ concepto, categoria, medioPago = 'Efectivo', importe, comprobante, fecha }) => {
     if (state.role !== 'tesorero' && state.role !== 'admin') {
       showToast('Solo Tesorería puede registrar egresos de caja.', 'warning');
       return;
@@ -737,6 +1139,7 @@ export function CooperadoraProvider({ children }) {
       fecha: fecha || new Date().toISOString().split('T')[0],
       concepto: concepto.trim(),
       categoria: categoria || 'Mantenimiento',
+      medioPago: medioPago || 'Efectivo',
       importe: Number(importe),
       comprobante: comprobante.trim() || 'S/C',
       autorizadoPor: `Tesorería (${state.currentUser?.nombre || 'Marta Rodríguez'})`
@@ -752,12 +1155,12 @@ export function CooperadoraProvider({ children }) {
         createAuditEntry(
           'Tesorería',
           'EGRESO_REGISTRADO',
-          `Registro de gasto ${nuevoEgreso.id} por $${nuevoEgreso.importe.toLocaleString('es-AR')} (${nuevoEgreso.concepto}).`
+          `Registro de gasto ${nuevoEgreso.id} por $${nuevoEgreso.importe.toLocaleString('es-AR')} (${nuevoEgreso.medioPago} — ${nuevoEgreso.concepto}).`
         ),
         ...prev.auditLogs
       ]
     }));
-    showToast(`Egreso ${nuevoEgreso.id} asentado en Tesorería.`, 'success');
+    showToast(`Egreso ${nuevoEgreso.id} asentado en Tesorería (${nuevoEgreso.medioPago}).`, 'success');
   };
 
   const cerrarPeriodoTesoreria = (nombrePeriodo) => {
@@ -766,7 +1169,7 @@ export function CooperadoraProvider({ children }) {
       return;
     }
     const ingresosValidos = state.pagos
-      .filter((p) => p.estado !== 'anulado')
+      .filter((p) => String(p.estado || '').toUpperCase() !== 'ANULADO')
       .reduce((acc, p) => acc + p.montoTotal, 0);
     const egresosTotales = (state.tesoreria.egresos || []).reduce(
       (acc, e) => acc + e.importe,
@@ -891,6 +1294,7 @@ export function CooperadoraProvider({ children }) {
     <CooperadoraContext.Provider
       value={{
         state,
+        isAuthenticated: Boolean(sessionToken && state.currentUser),
         activeTab,
         setActiveTab,
         selectedCuotaIds,
@@ -922,11 +1326,18 @@ export function CooperadoraProvider({ children }) {
         ajustarCuota,
         ajustarCuotasGeneral,
         registrarAlumno,
+        editarAlumno,
+        cambiarTutorAlumno,
+        solicitarBajaMatricula,
+        aprobarBajaMatricula,
         guardarTutor,
         registrarNuevaCuota,
         modificarPago,
         anularPago,
         validarPagoTesoreria,
+        rechazarComprobanteTesoreria,
+        registrarArqueoCaja,
+        cambiarPeriodoFiscalTesoreria,
         registrarEgresoTesoreria,
         cerrarPeriodoTesoreria,
         exportBackupJSON,

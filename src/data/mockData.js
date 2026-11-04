@@ -90,14 +90,17 @@ export function getInitialMockData() {
     tesoreria: {
       id: 1,
       cooperadoraId: 1,
-      periodoActual: '2026-06 (Junio 2026)',
+      periodoActual: '2026-05 (Mayo 2026)',
       saldoInicial: 125000,
+      saldoInicialEfectivo: 45000,
+      saldoInicialBanco: 80000,
       egresos: [
         {
           id: 'EGR-2026-001',
           fecha: '2026-03-22',
           concepto: 'Compra de artículos de limpieza e higiene institucional',
           categoria: 'Mantenimiento',
+          medioPago: 'Efectivo',
           importe: 14500,
           comprobante: 'FC-B-0004-001928',
           autorizadoPor: 'Tesorera (Marta Rodríguez)'
@@ -107,6 +110,7 @@ export function getInitialMockData() {
           fecha: '2026-04-19',
           concepto: 'Reparación de cerraduras y vidrios de aulas (Planta Baja)',
           categoria: 'Infraestructura',
+          medioPago: 'Transferencia',
           importe: 18000,
           comprobante: 'FC-C-0002-000841',
           autorizadoPor: 'Tesorera (Marta Rodríguez)'
@@ -116,11 +120,26 @@ export function getInitialMockData() {
           fecha: '2026-05-12',
           concepto: 'Resmas de papel A4 y tóners para Secretaría y Dirección',
           categoria: 'Insumos Escolares',
+          medioPago: 'Efectivo',
           importe: 12000,
           comprobante: 'FC-B-0012-009410',
           autorizadoPor: 'Tesorera (Marta Rodríguez)'
         }
       ],
+      arqueos: [
+        {
+          id: 'ARQ-2026-001',
+          fecha: '2026-04-30 17:45',
+          turno: 'Tarde',
+          responsable: 'Marta Rodríguez (Tesorera)',
+          efectivoEsperado: 44500,
+          efectivoContado: 44500,
+          diferencia: 0,
+          estado: 'CUADRADO',
+          observaciones: 'Recuento físico de billetes al cierre de Abril sin diferencias.'
+        }
+      ],
+      reversosContables: [],
       cierresPeriodo: [
         {
           id: 'CIE-2026-03',
@@ -257,11 +276,11 @@ export function getInitialMockData() {
 
       // Sofía Gómez (alu-2)
       { id: 'c-alu-2-3', alumnoId: 'alu-2', mesId: 3, concepto: 'Cuota Marzo 2026', periodo: '2026-03', vencimiento: '10/03/2026', monto: CUOTA_BASE, estado: 'pagada', pagoId: 'REC-2026-003' },
-      { id: 'c-alu-2-4', alumnoId: 'alu-2', mesId: 4, concepto: 'Cuota Abril 2026', periodo: '2026-04', vencimiento: '10/04/2026', monto: CUOTA_BASE, estado: 'pendiente', pagoId: null },
-      { id: 'c-alu-2-5', alumnoId: 'alu-2', mesId: 5, concepto: 'Cuota Mayo 2026', periodo: '2026-05', vencimiento: '10/05/2026', monto: CUOTA_BASE, estado: 'pendiente', pagoId: null },
-      { id: 'c-alu-2-6', alumnoId: 'alu-2', mesId: 6, concepto: 'Cuota Junio 2026', periodo: '2026-06', vencimiento: '10/06/2026', monto: CUOTA_BASE, estado: 'vencida', pagoId: null },
-      { id: 'c-alu-2-7', alumnoId: 'alu-2', mesId: 7, concepto: 'Cuota Julio 2026', periodo: '2026-07', vencimiento: '10/07/2026', monto: CUOTA_BASE, estado: 'pendiente', pagoId: null },
-      { id: 'c-alu-2-8', alumnoId: 'alu-2', mesId: 8, concepto: 'Cuota Agosto 2026', periodo: '2026-08', vencimiento: '10/08/2026', monto: CUOTA_BASE, estado: 'pendiente', pagoId: null },
+      { id: 'c-alu-2-4', alumnoId: 'alu-2', mesId: 4, concepto: 'Cuota Abril 2026', periodo: '2026-04', vencimiento: '10/04/2026', monto: CUOTA_BASE, estado: 'pagada', pagoId: 'REC-2026-010' },
+      { id: 'c-alu-2-5', alumnoId: 'alu-2', mesId: 5, concepto: 'Cuota Mayo 2026', periodo: '2026-05', vencimiento: '10/05/2026', monto: CUOTA_BASE, estado: 'pagada', pagoId: 'REC-2026-010' },
+      { id: 'c-alu-2-6', alumnoId: 'alu-2', mesId: 6, concepto: 'Cuota Junio 2026', periodo: '2026-06', vencimiento: '10/06/2026', monto: CUOTA_BASE, estado: 'pagada', pagoId: 'REC-2026-010' },
+      { id: 'c-alu-2-7', alumnoId: 'alu-2', mesId: 7, concepto: 'Cuota Julio 2026', periodo: '2026-07', vencimiento: '10/07/2026', monto: CUOTA_BASE, estado: 'pagada', pagoId: 'REC-2026-010' },
+      { id: 'c-alu-2-8', alumnoId: 'alu-2', mesId: 8, concepto: 'Cuota Agosto 2026', periodo: '2026-08', vencimiento: '10/08/2026', monto: CUOTA_BASE, estado: 'pagada', pagoId: 'REC-2026-010' },
       { id: 'c-alu-2-9', alumnoId: 'alu-2', mesId: 9, concepto: 'Cuota Septiembre 2026', periodo: '2026-09', vencimiento: '10/09/2026', monto: CUOTA_BASE, estado: 'pendiente', pagoId: null },
       { id: 'c-alu-2-10', alumnoId: 'alu-2', mesId: 10, concepto: 'Cuota Octubre 2026', periodo: '2026-10', vencimiento: '10/10/2026', monto: CUOTA_BASE, estado: 'pendiente', pagoId: null },
       { id: 'c-alu-2-11', alumnoId: 'alu-2', mesId: 11, concepto: 'Cuota Noviembre 2026', periodo: '2026-11', vencimiento: '10/11/2026', monto: CUOTA_BASE, estado: 'pendiente', pagoId: null },
@@ -414,7 +433,7 @@ export function getInitialMockData() {
       {
         id: 'REC-2026-006',
         numeroComprobante: 6,
-        fecha: '2026-05-09',
+        fecha: '2026-05-19',
         alumnoId: 'alu-3',
         tutorId: 'tut-2',
         conceptos: ['Cuota Mayo 2026'],
@@ -425,10 +444,17 @@ export function getInitialMockData() {
         montoTotal: 5000,
         medio: 'Transferencia',
         comprobante: 'TRF-MP-441209',
+        comprobanteAdjunto: {
+          nombre: 'comprobante_mercadopago_441209.png',
+          tipo: 'image/svg+xml',
+          tamanio: '16.8 KB',
+          fechaSubida: '2026-05-19 14:18',
+          dataUrl: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="440" viewBox="0 0 600 440"><rect width="600" height="440" fill="%23f1f5f9" rx="14"/><rect width="600" height="76" fill="%230284c7" rx="14"/><text x="30" y="47" fill="%23ffffff" font-family="sans-serif" font-size="19" font-weight="bold">MERCADO PAGO — Constancia de Transferencia CVU</text><rect x="30" y="100" width="540" height="310" fill="%23ffffff" rx="10" stroke="%23cbd5e1" stroke-width="1.5"/><text x="50" y="135" fill="%230f172a" font-family="sans-serif" font-size="13" font-weight="bold">DATOS DE LA TRANSFERENCIA</text><line x1="50" y1="146" x2="550" y2="146" stroke="%23e2e8f0" stroke-width="1"/><text x="50" y="176" fill="%2364748b" font-family="sans-serif" font-size="12">N° Operación / Referencia:</text><text x="255" y="176" fill="%230f172a" font-family="monospace" font-size="13" font-weight="bold">TRF-MP-441209</text><text x="50" y="206" fill="%2364748b" font-family="sans-serif" font-size="12">Fecha y Hora:</text><text x="255" y="206" fill="%230f172a" font-family="sans-serif" font-size="13">19/05/2026 - 14:17:04 hs</text><text x="50" y="236" fill="%2364748b" font-family="sans-serif" font-size="12">Destinatario:</text><text x="255" y="236" fill="%230f172a" font-family="sans-serif" font-size="13">Asoc. Coop. ENS Dalmacio Vélez Sársfield</text><text x="50" y="266" fill="%2364748b" font-family="sans-serif" font-size="12">CUIT / CBU Destino:</text><text x="255" y="266" fill="%230f172a" font-family="monospace" font-size="13">30-71234567-9 • Alias: COOP.VELEZ.DVS</text><text x="50" y="296" fill="%2364748b" font-family="sans-serif" font-size="12">Ordenante / Titular:</text><text x="255" y="296" fill="%230f172a" font-family="sans-serif" font-size="13">Laura Rivas (DNI 30.222.333) — Alumna: Martina Benítez</text><text x="50" y="330" fill="%2364748b" font-family="sans-serif" font-size="12">Importe Transferido:</text><text x="255" y="330" fill="%230284c7" font-family="monospace" font-size="18" font-weight="bold">$ 5.000,00 ARS</text><rect x="50" y="352" width="500" height="38" fill="%23f0f9ff" rx="6" stroke="%23bae6fd"/><text x="65" y="376" fill="%230369a1" font-family="sans-serif" font-size="12" font-weight="bold">✓ Transferencia enviada — Sujeta a conciliación de Tesorería</text></svg>'
+        },
         operador: 'Secretaría (Ana Martínez)',
         estado: 'valido',
         validadoTesoreria: false,
-        observaciones: 'Pendiente de visado por Tesorería',
+        observaciones: 'Pendiente de visado y conciliación bancaria por Tesorería',
         historialEdiciones: []
       },
       {
@@ -489,6 +515,39 @@ export function getInitialMockData() {
         estado: 'valido',
         validadoTesoreria: false,
         observaciones: 'Cobro en ventanilla pendiente de arqueo',
+        historialEdiciones: []
+      },
+      {
+        id: 'REC-2026-010',
+        numeroComprobante: 10,
+        fecha: '2026-05-21',
+        alumnoId: 'alu-2',
+        tutorId: 'tut-1',
+        conceptos: [
+          'Cuota Abril 2026 (Hermano -20%)',
+          'Cuota Mayo 2026 (Hermano -20%)',
+          'Cuota Junio 2026 (Hermano -20%)',
+          'Cuota Julio 2026 (Hermano -20%)',
+          'Cuota Agosto 2026 (Hermano -20%)'
+        ],
+        cuotaIds: ['c-alu-2-4', 'c-alu-2-5', 'c-alu-2-6', 'c-alu-2-7', 'c-alu-2-8'],
+        montoSubtotal: 25000,
+        descuento: 5000,
+        recargo: 0,
+        montoTotal: 20000,
+        medio: 'Transferencia',
+        comprobante: 'TRF-MACRO-551902',
+        comprobanteAdjunto: {
+          nombre: 'comprobante_banco_macro_551902.png',
+          tipo: 'image/svg+xml',
+          tamanio: '18.4 KB',
+          fechaSubida: '2026-05-21 11:05',
+          dataUrl: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="440" viewBox="0 0 600 440"><rect width="600" height="440" fill="%23f8fafc" rx="14"/><rect width="600" height="76" fill="%231e3a8a" rx="14"/><text x="30" y="47" fill="%23ffffff" font-family="sans-serif" font-size="19" font-weight="bold">BANCO MACRO — Comprobante de Transferencia CBU</text><rect x="30" y="100" width="540" height="310" fill="%23ffffff" rx="10" stroke="%23cbd5e1" stroke-width="1.5"/><text x="50" y="135" fill="%230f172a" font-family="sans-serif" font-size="13" font-weight="bold">DETALLE DE LA OPERACIÓN BANCARIA</text><line x1="50" y1="146" x2="550" y2="146" stroke="%23e2e8f0" stroke-width="1"/><text x="50" y="176" fill="%2364748b" font-family="sans-serif" font-size="12">N° Referencia Bancaria:</text><text x="255" y="176" fill="%230f172a" font-family="monospace" font-size="13" font-weight="bold">TRF-MACRO-551902</text><text x="50" y="206" fill="%2364748b" font-family="sans-serif" font-size="12">Fecha y Hora:</text><text x="255" y="206" fill="%230f172a" font-family="sans-serif" font-size="13">21/05/2026 - 11:03:42 hs</text><text x="50" y="236" fill="%2364748b" font-family="sans-serif" font-size="12">Cuenta Destino:</text><text x="255" y="236" fill="%230f172a" font-family="sans-serif" font-size="13">Asoc. Coop. ENS Dalmacio Vélez Sársfield</text><text x="50" y="266" fill="%2364748b" font-family="sans-serif" font-size="12">Concepto Informado:</text><text x="255" y="266" fill="%230f172a" font-family="sans-serif" font-size="13">5 Cuotas (Abril a Agosto 2026) - Sofía Gómez</text><text x="50" y="296" fill="%2364748b" font-family="sans-serif" font-size="12">Ordenante:</text><text x="255" y="296" fill="%230f172a" font-family="sans-serif" font-size="13">Carlos Gómez (DNI 28.111.222)</text><text x="50" y="330" fill="%2364748b" font-family="sans-serif" font-size="12">Importe Total Transferido:</text><text x="255" y="330" fill="%23047857" font-family="monospace" font-size="18" font-weight="bold">$ 20.000,00 ARS</text><rect x="50" y="352" width="500" height="38" fill="%23ecfdf5" rx="6" stroke="%23a7f3d0"/><text x="65" y="376" fill="%23065f46" font-family="sans-serif" font-size="12" font-weight="bold">✓ Transferencia acreditada — Bonificación Hermanos -20% aplicada</text></svg>'
+        },
+        operador: 'Secretaría (Ana Martínez)',
+        estado: 'valido',
+        validadoTesoreria: false,
+        observaciones: 'Adelanto de 5 cuotas consecutivas (Abril – Agosto 2026) con Desc. Hermanos -20%',
         historialEdiciones: []
       }
     ],

@@ -49,7 +49,9 @@ export default function PortalTutorView() {
 
   const recibosFamiliares = currentTutor
     ? state.pagos.filter(
-        (p) => p.tutorId === currentTutor.id && p.estado !== 'anulado'
+        (p) =>
+          p.tutorId === currentTutor.id &&
+          String(p.estado || '').toUpperCase() !== 'ANULADO'
       )
     : [];
 

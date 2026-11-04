@@ -19,7 +19,7 @@ export default function ReportesView() {
   const fileInputRef = useRef(null);
 
   const pagosValidos = state.pagos.filter((p) => {
-    if (p.estado === 'anulado') return false;
+    if (String(p.estado || '').toUpperCase() === 'ANULADO') return false;
     const matchPeriodo =
       periodoFiltro === 'todos' || p.fecha.startsWith(periodoFiltro);
     const matchMedio = medioFiltro === 'todos' || p.medio === medioFiltro;

@@ -62,17 +62,17 @@ export const PROFILES_CONFIG = [
     id: 'tutor',
     rol: 'tutor',
     titulo: 'Familia / Padre / Tutor',
-    subtitulo: 'Portal de Autogestión de Socios',
+    subtitulo: 'Portal Privado de Autogestión',
     icono: 'fa-house-user',
     colorHeader: 'from-blue-700 to-cyan-800',
     borderColor: 'border-blue-500/40 hover:border-blue-500',
-    badgeColor: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300 dark:border-blue-800',
-    descripcion: 'Portal exclusivo para socios de la cooperadora: consulta transparente del estado de cuenta de sus hijos y descarga de comprobantes.',
+    badgeColor: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300 dark:border-emerald-800',
+    descripcion: 'Portal privado para padres y tutores: requiere registro previo con sus datos y muestra únicamente la información de su(s) propio(s) hijo(s).',
     tareas: [
-      'Consulta en tiempo real del estado de cuenta de sus hijos',
-      'Visualización de cuotas al día y vencimientos del ciclo',
-      'Descarga e impresión de recibos oficiales con código QR',
-      'Seguimiento transparente de comprobantes informados'
+      'Registro obligatorio del padre/tutor y validación con el padrón',
+      'Privacidad estricta: acceso exclusivo a su(s) hijo(s) a cargo',
+      'Consulta de estado de cuotas y descuento del 20% por hermanos',
+      'Descarga de sus propios comprobantes de pago oficiales (PDF)'
     ],
     usuarioDemo: 'tutor',
     emailDemo: 'carlos.gomez@gmail.com'

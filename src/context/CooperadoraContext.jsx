@@ -28,20 +28,24 @@ export function CooperadoraProvider({ children }) {
     if (token) {
       const res = authService.verifyToken(token);
       if (res.valid && res.payload) {
-        const matchingUser = USUARIOS_SISTEMA.find((u) => u.id === res.payload.sub) || {
-          id: res.payload.sub,
-          username: res.payload.username,
-          nombre: res.payload.nombre,
-          email: res.payload.email,
-          rol: res.payload.rol,
-          cargo: res.payload.cargo,
-          tutorId: res.payload.tutorId
-        };
+        const dynamicTutors = loaded.usuariosTutores || [];
+        const matchingUser =
+          dynamicTutors.find((u) => u.id === res.payload.sub) ||
+          USUARIOS_SISTEMA.find((u) => u.id === res.payload.sub) || {
+            id: res.payload.sub,
+            username: res.payload.username,
+            nombre: res.payload.nombre,
+            email: res.payload.email,
+            rol: res.payload.rol,
+            cargo: res.payload.cargo,
+            tutorId: res.payload.tutorId || null,
+            requiereRegistro: res.payload.rol === 'tutor' && !res.payload.tutorId
+          };
         return {
           ...loaded,
           role: matchingUser.rol,
           currentUser: matchingUser,
-          selectedTutorPortalId: matchingUser.tutorId || loaded.selectedTutorPortalId
+          selectedTutorPortalId: matchingUser.tutorId || null
         };
       }
     }
@@ -136,7 +140,37 @@ export function CooperadoraProvider({ children }) {
   };
 
   // --- AUTENTICACIÓN, SESIONES SEGURAS CON JWT Y CONTROL DE ACCESO (RBAC) ---
+  const normalizeDni = (val) => String(val || '').replace(/[.\-\s]/g, '').trim();
+
   const setRole = (role) => {
+    if (role === 'tutor') {
+      // Al cambiar al área de Padre/Tutor sin haberse registrado/identificado individualmente,
+      // no se precarga información de ningún otro padre hasta que complete su registro o login personal.
+      const guestTutorUser = {
+        id: 'tutor-pending',
+        username: 'tutor_sin_registrar',
+        nombre: 'Padre / Tutor (Pendiente de Registro)',
+        email: 'Sin sesión familiar vinculada',
+        rol: 'tutor',
+        cargo: 'Portal de Autogestión Familiar',
+        tutorId: null,
+        requiereRegistro: true
+      };
+      const token = authService.generateToken(guestTutorUser);
+      authService.saveToken(token);
+      setSessionToken(token);
+
+      setState((prev) => ({
+        ...prev,
+        role: 'tutor',
+        currentUser: guestTutorUser,
+        selectedTutorPortalId: null
+      }));
+      setActiveTab('portalTutor');
+      showToast('Área Padre / Tutor: Regístrese o valide sus datos para consultar a sus hijos.', 'info');
+      return;
+    }
+
     const matchingUser =
       USUARIOS_SISTEMA.find((u) => u.rol === role) || USUARIOS_SISTEMA[0];
 
@@ -154,8 +188,6 @@ export function CooperadoraProvider({ children }) {
     // Redirección contextual según el Rol RBAC
     if ((role === 'director' || role === 'admin') && (activeTab === 'recepcion' || activeTab === 'tesoreria')) {
       setActiveTab('reportes');
-    } else if (role === 'tutor') {
-      setActiveTab('portalTutor');
     } else if (role === 'tesorero' && activeTab === 'portalTutor') {
       setActiveTab('tesoreria');
     } else if (role === 'secretaria' && (activeTab === 'tesoreria' || activeTab === 'portalTutor')) {
@@ -172,16 +204,26 @@ export function CooperadoraProvider({ children }) {
     showToast(`Rol activo: ${roleNames[role] || role}`, 'info');
   };
 
-  const iniciarSesion = (usernameOrEmail, password) => {
-    const input = (usernameOrEmail || '').trim().toLowerCase();
-    const found = USUARIOS_SISTEMA.find(
-      (u) =>
-        (u.username.toLowerCase() === input || u.email.toLowerCase() === input) &&
-        (u.password === password || u.passwordHash === password)
-    );
+  const iniciarSesion = (usernameOrEmailOrDni, password) => {
+    const input = (usernameOrEmailOrDni || '').trim().toLowerCase();
+    const inputDni = normalizeDni(usernameOrEmailOrDni);
+
+    const usuariosDinamicos = state.usuariosTutores || [];
+    const todosLosUsuarios = [...usuariosDinamicos, ...USUARIOS_SISTEMA];
+
+    const found = todosLosUsuarios.find((u) => {
+      const matchUsername = u.username && u.username.toLowerCase() === input;
+      const matchEmail = u.email && u.email.toLowerCase() === input;
+      const matchDni = u.dni && inputDni && normalizeDni(u.dni) === inputDni;
+      const matchPass = u.password === password || u.passwordHash === password;
+      return (matchUsername || matchEmail || matchDni) && matchPass;
+    });
 
     if (!found) {
-      return { ok: false, error: 'Credenciales inválidas. Verifique su usuario/correo institucional y contraseña.' };
+      return {
+        ok: false,
+        error: 'Credenciales inválidas o padre aún no registrado. Si ingresa por primera vez como Padre/Tutor, utilice la pestaña "Registrarme".'
+      };
     }
 
     // Generar y almacenar token JWT seguro
@@ -192,8 +234,8 @@ export function CooperadoraProvider({ children }) {
     setState((prev) => ({
       ...prev,
       role: found.rol,
-      currentUser: found,
-      selectedTutorPortalId: found.tutorId || prev.selectedTutorPortalId,
+      currentUser: { ...found, requiereRegistro: false },
+      selectedTutorPortalId: found.tutorId || null,
       auditLogs: [
         createAuditEntry(
           found.cargo,
@@ -212,6 +254,212 @@ export function CooperadoraProvider({ children }) {
     setIsLoginModalOpen(false);
     showToast(`Bienvenido/a, ${found.nombre} (${found.cargo}) — Sesión JWT iniciada`, 'success');
     return { ok: true, user: found, token };
+  };
+
+  // Registro e identificación de Padre / Tutor validando vínculo en el Padrón Escolar
+  const registrarCuentaTutor = ({
+    nombre,
+    apellido,
+    dni,
+    email,
+    telefono,
+    password,
+    dniHijo
+  }) => {
+    const cleanNombre = (nombre || '').trim();
+    const cleanApellido = (apellido || '').trim();
+    const cleanDni = (dni || '').trim();
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanTel = (telefono || '').trim();
+    const cleanPass = (password || '').trim();
+    const normTutorDni = normalizeDni(cleanDni);
+    const normHijoDni = normalizeDni(dniHijo);
+
+    if (!cleanNombre || !cleanApellido || !normTutorDni || !cleanEmail || !cleanPass) {
+      return {
+        ok: false,
+        error: 'Complete todos sus datos obligatorios (Nombre, Apellido, DNI, Correo y Contraseña).'
+      };
+    }
+
+    // 1. Buscar si el DNI del Padre/Tutor ya existe en el Padrón de Socios/Tutores
+    const existingTutor = state.tutores.find(
+      (t) => normalizeDni(t.dni) === normTutorDni
+    );
+
+    // 2. Buscar si ingresó el DNI de su hijo/a en el Padrón de Alumnos
+    const matchedAlumnoByDni = normHijoDni
+      ? state.alumnos.find((a) => normalizeDni(a.dni) === normHijoDni)
+      : null;
+
+    if (!existingTutor && !matchedAlumnoByDni) {
+      return {
+        ok: false,
+        error:
+          'No se encontró su DNI en el padrón de tutores ni un alumno matriculado con el DNI de hijo/a indicado. Verifique su DNI o ingrese el DNI de su hijo/a matriculado/a para validar su vínculo.'
+      };
+    }
+
+    // Si ambos existen, verificar que no pertenezcan a otra familia distinta, o vincular al alumno
+    let targetTutorId = existingTutor ? existingTutor.id : `tut-${state.tutores.length + 1}`;
+    let updatedTutores = [...state.tutores];
+    let updatedAlumnos = [...state.alumnos];
+
+    if (existingTutor) {
+      updatedTutores = updatedTutores.map((t) =>
+        t.id === existingTutor.id
+          ? {
+              ...t,
+              nombre: cleanNombre,
+              apellido: cleanApellido,
+              email: cleanEmail,
+              telefono: cleanTel || t.telefono,
+              registradoPortal: true,
+              estado: 'Activo'
+            }
+          : t
+      );
+      if (matchedAlumnoByDni && matchedAlumnoByDni.tutorId !== existingTutor.id) {
+        updatedAlumnos = updatedAlumnos.map((a) =>
+          a.id === matchedAlumnoByDni.id ? { ...a, tutorId: existingTutor.id } : a
+        );
+      }
+    } else {
+      const nuevoTutorObj = {
+        id: targetTutorId,
+        cooperadoraId: 1,
+        nombre: cleanNombre,
+        apellido: cleanApellido,
+        dni: cleanDni,
+        telefono: cleanTel || 'S/D',
+        email: cleanEmail,
+        fechaAlta: new Date().toISOString().split('T')[0],
+        estado: 'Activo',
+        registradoPortal: true
+      };
+      updatedTutores.push(nuevoTutorObj);
+
+      if (matchedAlumnoByDni) {
+        updatedAlumnos = updatedAlumnos.map((a) =>
+          a.id === matchedAlumnoByDni.id ? { ...a, tutorId: targetTutorId } : a
+        );
+      }
+    }
+
+    const hijosVinculados = updatedAlumnos.filter((a) => a.tutorId === targetTutorId);
+
+    const nuevoUsuarioTutor = {
+      id: `usr-tut-${targetTutorId}`,
+      username: normTutorDni,
+      dni: cleanDni,
+      password: cleanPass,
+      passwordHash: cleanPass,
+      nombre: `${cleanNombre} ${cleanApellido}`,
+      email: cleanEmail,
+      telefono: cleanTel || existingTutor?.telefono || 'S/D',
+      rol: 'tutor',
+      tutorId: targetTutorId,
+      cargo: 'Padre / Tutor Registrado (Socio Cooperadora)',
+      requiereRegistro: false
+    };
+
+    const token = authService.generateToken(nuevoUsuarioTutor);
+    authService.saveToken(token);
+    setSessionToken(token);
+
+    setState((prev) => {
+      const prevUsuariosTutores = (prev.usuariosTutores || []).filter(
+        (u) => u.tutorId !== targetTutorId && normalizeDni(u.dni) !== normTutorDni
+      );
+      return {
+        ...prev,
+        role: 'tutor',
+        currentUser: nuevoUsuarioTutor,
+        selectedTutorPortalId: targetTutorId,
+        tutores: updatedTutores,
+        alumnos: updatedAlumnos,
+        usuariosTutores: [nuevoUsuarioTutor, ...prevUsuariosTutores],
+        auditLogs: [
+          createAuditEntry(
+            'Portal Autogestión Familiar',
+            'REGISTRO_PADRE_TUTOR',
+            `Alta y validación de cuenta digital para el Padre/Tutor ${cleanApellido}, ${cleanNombre} (DNI ${cleanDni}). Hijos vinculados en su cuenta exclusiva: ${hijosVinculados.map((h) => `${h.nombre} ${h.apellido}`).join(', ') || 'Ninguno'}.`
+          ),
+          ...prev.auditLogs
+        ]
+      };
+    });
+
+    setActiveTab('portalTutor');
+    setIsLoginModalOpen(false);
+    showToast(
+      `¡Registro exitoso! Bienvenido/a ${cleanNombre} ${cleanApellido}. Se vincularon ${hijosVinculados.length} hijo(s) a su cuenta.`,
+      'success'
+    );
+
+    return { ok: true, user: nuevoUsuarioTutor, tutorId: targetTutorId, hijos: hijosVinculados };
+  };
+
+  // Permite a un Padre/Tutor ya registrado vincular otro hijo por DNI si fue matriculado recientemente
+  const vincularHijoPorDni = (dniHijo) => {
+    const tutorId = state.currentUser?.tutorId;
+    if (!tutorId) {
+      return { ok: false, error: 'Debe estar registrado como Padre/Tutor para vincular un hijo.' };
+    }
+    const normDni = normalizeDni(dniHijo);
+    if (!normDni) {
+      return { ok: false, error: 'Ingrese el DNI del alumno.' };
+    }
+    const alumno = state.alumnos.find((a) => normalizeDni(a.dni) === normDni);
+    if (!alumno) {
+      return { ok: false, error: 'No se encontró ningún alumno matriculado con ese DNI en el padrón.' };
+    }
+    if (alumno.tutorId === tutorId) {
+      return { ok: false, error: `${alumno.nombre} ${alumno.apellido} ya se encuentra vinculado a su cuenta.` };
+    }
+
+    setState((prev) => ({
+      ...prev,
+      alumnos: prev.alumnos.map((a) =>
+        a.id === alumno.id ? { ...a, tutorId } : a
+      ),
+      auditLogs: [
+        createAuditEntry(
+          state.currentUser?.nombre || 'Padre / Tutor',
+          'VINCULACION_HIJO_PORTAL',
+          `El socio/tutor vinculó por DNI al alumno ${alumno.apellido}, ${alumno.nombre} (DNI ${alumno.dni}) a su grupo familiar.`
+        ),
+        ...prev.auditLogs
+      ]
+    }));
+
+    showToast(`Alumno ${alumno.nombre} ${alumno.apellido} vinculado a su grupo familiar.`, 'success');
+    return { ok: true, alumno };
+  };
+
+  // Permite volver a la pantalla de registro/identificación de Padre/Tutor sin exponer datos
+  const cambiarCuentaTutorPortal = () => {
+    const guestTutorUser = {
+      id: 'tutor-pending',
+      username: 'tutor_sin_registrar',
+      nombre: 'Padre / Tutor (Pendiente de Registro)',
+      email: 'Sin sesión familiar vinculada',
+      rol: 'tutor',
+      cargo: 'Portal de Autogestión Familiar',
+      tutorId: null,
+      requiereRegistro: true
+    };
+    const token = authService.generateToken(guestTutorUser);
+    authService.saveToken(token);
+    setSessionToken(token);
+
+    setState((prev) => ({
+      ...prev,
+      role: 'tutor',
+      currentUser: guestTutorUser,
+      selectedTutorPortalId: null
+    }));
+    showToast('Sesión familiar cerrada. Ingrese o registre un Padre/Tutor para ver sus datos.', 'info');
   };
 
   const cerrarSesion = () => {
@@ -1312,6 +1560,9 @@ export function CooperadoraProvider({ children }) {
         setPreviewComprobante,
         setRole,
         iniciarSesion,
+        registrarCuentaTutor,
+        vincularHijoPorDni,
+        cambiarCuentaTutorPortal,
         cerrarSesion,
         getStudent,
         getTutor,

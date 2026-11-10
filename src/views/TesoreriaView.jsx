@@ -14,10 +14,16 @@ const DENOMINACIONES_BILLETES = [
 
 const PERIODOS_FISCALES = [
   { codigo: '2026-TODOS', mesPrefijo: '2026', label: 'Ciclo Fiscal 2026 (Completo)', mesNombre: 'Ciclo 2026', fechaRef: '2026-05-21' },
-  { codigo: '2026-05', mesPrefijo: '2026-05', label: '2026-05 (Mayo 2026)', mesNombre: 'Mayo 2026', fechaRef: '2026-05-21' },
-  { codigo: '2026-04', mesPrefijo: '2026-04', label: '2026-04 (Abril 2026)', mesNombre: 'Abril 2026', fechaRef: '2026-04-14' },
   { codigo: '2026-03', mesPrefijo: '2026-03', label: '2026-03 (Marzo 2026)', mesNombre: 'Marzo 2026', fechaRef: '2026-03-18' },
-  { codigo: '2026-06', mesPrefijo: '2026-06', label: '2026-06 (Junio 2026)', mesNombre: 'Junio 2026', fechaRef: '2026-06-10' }
+  { codigo: '2026-04', mesPrefijo: '2026-04', label: '2026-04 (Abril 2026)', mesNombre: 'Abril 2026', fechaRef: '2026-04-14' },
+  { codigo: '2026-05', mesPrefijo: '2026-05', label: '2026-05 (Mayo 2026)', mesNombre: 'Mayo 2026', fechaRef: '2026-05-21' },
+  { codigo: '2026-06', mesPrefijo: '2026-06', label: '2026-06 (Junio 2026)', mesNombre: 'Junio 2026', fechaRef: '2026-06-10' },
+  { codigo: '2026-07', mesPrefijo: '2026-07', label: '2026-07 (Julio 2026)', mesNombre: 'Julio 2026', fechaRef: '2026-07-10' },
+  { codigo: '2026-08', mesPrefijo: '2026-08', label: '2026-08 (Agosto 2026)', mesNombre: 'Agosto 2026', fechaRef: '2026-08-10' },
+  { codigo: '2026-09', mesPrefijo: '2026-09', label: '2026-09 (Septiembre 2026)', mesNombre: 'Septiembre 2026', fechaRef: '2026-09-10' },
+  { codigo: '2026-10', mesPrefijo: '2026-10', label: '2026-10 (Octubre 2026)', mesNombre: 'Octubre 2026', fechaRef: '2026-10-10' },
+  { codigo: '2026-11', mesPrefijo: '2026-11', label: '2026-11 (Noviembre 2026)', mesNombre: 'Noviembre 2026', fechaRef: '2026-11-10' },
+  { codigo: '2026-12', mesPrefijo: '2026-12', label: '2026-12 (Diciembre 2026)', mesNombre: 'Diciembre 2026', fechaRef: '2026-12-10' }
 ];
 
 const MOTIVOS_ANULACION_TIPIFICADOS = [
@@ -215,19 +221,27 @@ export default function TesoreriaView() {
   const [detalleAnulacion, setDetalleAnulacion] = useState('');
   const [errorAnulacion, setErrorAnulacion] = useState('');
 
-  // Estado Modal Ajustar Cuota Individual (Auditoría Obligatoria)
-  const [cuotaAjustarTarget, setCuotaAjustarTarget] = useState(null);
-  const [montoCuotaAjuste, setMontoCuotaAjuste] = useState('');
-  const [motivoCuotaAjuste, setMotivoCuotaAjuste] = useState('');
-  const [errorAjuste, setErrorAjuste] = useState('');
-
-  // Estado Modal Reajuste General Masivo
+  // Estado Modal Reajuste General Masivo (10 Meses del Ciclo Lectivo)
   const [isGeneralModalOpen, setIsGeneralModalOpen] = useState(false);
-  const [periodoGeneral, setPeriodoGeneral] = useState('todos_pendientes');
+  const [selectedPeriodosGeneral, setSelectedPeriodosGeneral] = useState(
+    MESES_CICLO.map((m) => m.periodo)
+  );
   const [montoGeneral, setMontoGeneral] = useState(5500);
   const [motivoGeneral, setMotivoGeneral] = useState(
-    'Actualización arancelaria aprobada en asamblea de cooperadora'
+    'Actualización arancelaria aprobada en asamblea general de cooperadora'
   );
+
+  const togglePeriodoGeneral = (periodo) => {
+    setSelectedPeriodosGeneral((prev) =>
+      prev.includes(periodo) ? prev.filter((p) => p !== periodo) : [...prev, periodo]
+    );
+  };
+  const selectAllPeriodosGeneral = () => {
+    setSelectedPeriodosGeneral(MESES_CICLO.map((m) => m.periodo));
+  };
+  const deselectAllPeriodosGeneral = () => {
+    setSelectedPeriodosGeneral([]);
+  };
 
   // Estado Modal Ver Historial de Auditoría de una Cuota
   const [cuotaHistorialTarget, setCuotaHistorialTarget] = useState(null);
@@ -240,9 +254,13 @@ export default function TesoreriaView() {
   const [egresoImporte, setEgresoImporte] = useState('');
   const [egresoComprobante, setEgresoComprobante] = useState('');
 
-  // Estado Modal Cerrar Período
+  // Estado Modal Cerrar Período y Acta Oficial
   const [isCierreModalOpen, setIsCierreModalOpen] = useState(false);
-  const [nombrePeriodoCierre, setNombrePeriodoCierre] = useState('2026-05 (Mayo)');
+  const [nombrePeriodoCierre, setNombrePeriodoCierre] = useState('Mayo 2026');
+  const [observacionesCierre, setObservacionesCierre] = useState(
+    'Cierre contable ordinario consolidado con verificación física de caja y cuentas bancarias.'
+  );
+  const [actaCierreTarget, setActaCierreTarget] = useState(null);
 
   // =========================================================================
   // 1. CÁLCULOS Y DESGLOSE CONTABLE DE SALDOS (FÍSICO VS. DIGITAL)
@@ -519,38 +537,18 @@ export default function TesoreriaView() {
     }
   };
 
-  const openAjustarCuotaModal = (cuota) => {
-    setCuotaAjustarTarget(cuota);
-    setMontoCuotaAjuste(cuota.monto);
-    setMotivoCuotaAjuste('');
-    setErrorAjuste('');
-  };
-
-  const handleConfirmarAjusteCuota = (e) => {
-    e.preventDefault();
-    if (!motivoCuotaAjuste.trim() || motivoCuotaAjuste.trim().length < 5) {
-      setErrorAjuste(
-        'El motivo del ajuste es obligatorio y debe contener al menos 5 caracteres para la bitácora de auditoría.'
-      );
-      return;
-    }
-    const res = ajustarCuota({
-      cuotaId: cuotaAjustarTarget.id,
-      nuevoMonto: Number(montoCuotaAjuste),
-      motivoAjuste: motivoCuotaAjuste.trim()
-    });
-    if (res.ok) {
-      setCuotaAjustarTarget(null);
-    } else {
-      setErrorAjuste(res.error || 'Error al aplicar el ajuste.');
-    }
-  };
+  const totalCuotasAfectadas = useMemo(() => {
+    return state.cuotas.filter(
+      (c) => selectedPeriodosGeneral.includes(c.periodo) && c.estado !== 'pagada'
+    ).length;
+  }, [state.cuotas, selectedPeriodosGeneral]);
 
   const handleConfirmarAjusteGeneral = (e) => {
     e.preventDefault();
     if (!motivoGeneral.trim() || motivoGeneral.trim().length < 5) return;
+    if (selectedPeriodosGeneral.length === 0) return;
     ajustarCuotasGeneral({
-      periodo: periodoGeneral,
+      periodos: selectedPeriodosGeneral,
       nuevoMonto: Number(montoGeneral),
       motivoAjuste: motivoGeneral.trim()
     });
@@ -575,7 +573,11 @@ export default function TesoreriaView() {
 
   const handleConfirmarCierre = (e) => {
     e.preventDefault();
-    cerrarPeriodoTesoreria(nombrePeriodoCierre);
+    if (!nombrePeriodoCierre.trim()) return;
+    cerrarPeriodoTesoreria({
+      periodo: nombrePeriodoCierre.trim(),
+      observaciones: observacionesCierre.trim()
+    });
     setIsCierreModalOpen(false);
   };
 
@@ -1502,19 +1504,36 @@ export default function TesoreriaView() {
                   </div>
                 </div>
 
+                <div className="mt-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
+                  <div className="flex items-center gap-2">
+                    <i className="fa-solid fa-shield-check text-emerald-600"></i>
+                    <span>
+                      Valores arancelarios estandarizados. Los montos se actualizan institucionalmente mediante <strong>Reajuste General Arancelario</strong>.
+                    </span>
+                  </div>
+                  {isTesorero && (
+                    <button
+                      onClick={() => setIsGeneralModalOpen(true)}
+                      className="px-3 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 text-xs font-bold transition flex items-center gap-1 shrink-0"
+                    >
+                      <i className="fa-solid fa-sliders"></i>
+                      <span>Reajuste General</span>
+                    </button>
+                  )}
+                </div>
+
                 <div className="mt-4 overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
-                      <tr className="bg-slate-50 dark:bg-slate-800 text-[11px] font-bold uppercase text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
-                        <th className="py-2.5 px-3">Concepto / Período</th>
-                        <th className="py-2.5 px-3">Vencimiento</th>
-                        <th className="py-2.5 px-3 text-right">Valor Arancel</th>
-                        <th className="py-2.5 px-3 text-center">Estado</th>
-                        <th className="py-2.5 px-3 text-center">Auditoría Ajustes</th>
-                        <th className="py-2.5 px-3 text-right">Acción</th>
+                      <tr className="bg-slate-50 dark:bg-slate-800 text-xs font-bold uppercase text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
+                        <th className="py-3 px-3">Concepto / Período</th>
+                        <th className="py-3 px-3">Vencimiento</th>
+                        <th className="py-3 px-3 text-right">Valor Arancel</th>
+                        <th className="py-3 px-3 text-center">Estado</th>
+                        <th className="py-3 px-3 text-center">Trazabilidad Fiscal</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
                       {cuotasDelAlumno.map((cuota) => {
                         const tieneAjustes =
                           cuota.historialAjustes && cuota.historialAjustes.length > 0;
@@ -1529,12 +1548,12 @@ export default function TesoreriaView() {
                               <span className="font-bold text-slate-800 dark:text-slate-100 block">
                                 {cuota.concepto}
                               </span>
-                              <span className="text-[10px] font-mono text-slate-500">
+                              <span className="text-xs font-mono text-slate-500">
                                 Período: {cuota.periodo}
                               </span>
                             </td>
 
-                            <td className="py-3 px-3 font-mono text-slate-600 dark:text-slate-400">
+                            <td className="py-3 px-3 font-mono text-slate-600 dark:text-slate-400 text-xs">
                               {cuota.vencimiento}
                             </td>
 
@@ -1544,15 +1563,15 @@ export default function TesoreriaView() {
 
                             <td className="py-3 px-3 text-center">
                               {isPagada ? (
-                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                                   Pagada ({cuota.pagoId})
                                 </span>
                               ) : cuota.estado === 'vencida' ? (
-                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                                <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
                                   Vencida
                                 </span>
                               ) : (
-                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                                <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
                                   Pendiente
                                 </span>
                               )}
@@ -1562,29 +1581,16 @@ export default function TesoreriaView() {
                               {tieneAjustes ? (
                                 <button
                                   onClick={() => setCuotaHistorialTarget(cuota)}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 text-[10px] font-bold hover:bg-indigo-100"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 text-xs font-bold hover:bg-indigo-100 transition"
                                   title="Ver trazabilidad de modificaciones de este arancel"
                                 >
                                   <i className="fa-solid fa-clock-rotate-left"></i>
                                   <span>{cuota.historialAjustes.length} ajuste(s)</span>
                                 </button>
                               ) : (
-                                <span className="text-[10px] text-slate-400 font-mono">
-                                  Original
+                                <span className="text-xs text-slate-400 font-mono">
+                                  Arancel Original
                                 </span>
-                              )}
-                            </td>
-
-                            <td className="py-3 px-3 text-right">
-                              {isTesorero && (
-                                <button
-                                  onClick={() => openAjustarCuotaModal(cuota)}
-                                  className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 text-xs font-bold transition flex items-center gap-1 ml-auto"
-                                  title="Editar valor de cuota exigiendo justificación obligatoria"
-                                >
-                                  <i className="fa-solid fa-pen-to-square"></i>
-                                  <span>Ajustar Monto</span>
-                                </button>
                               )}
                             </td>
                           </tr>
@@ -1685,26 +1691,74 @@ export default function TesoreriaView() {
           </div>
 
           <div className="lg:col-span-4 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-5">
-            <h3 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider mb-3 flex items-center gap-2">
-              <i className="fa-solid fa-lock text-amber-600"></i>
-              Actas de Cierre de Período
-            </h3>
-            <div className="space-y-3 text-xs">
+            <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <i className="fa-solid fa-lock text-amber-600"></i>
+                Actas de Cierre de Período
+              </h3>
+              {isTesorero && (
+                <button
+                  onClick={() => setIsCierreModalOpen(true)}
+                  className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold transition flex items-center gap-1 shadow-xs"
+                >
+                  <i className="fa-solid fa-plus"></i>
+                  <span>Nuevo Cierre</span>
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-3.5">
               {(state.tesoreria?.cierresPeriodo || []).map((cierre) => (
                 <div
                   key={cierre.id}
-                  className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50"
+                  className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:border-amber-400 transition"
                 >
-                  <div className="flex items-center justify-between font-bold">
-                    <span className="text-slate-900 dark:text-white">{cierre.periodo}</span>
-                    <span className="font-mono text-emerald-600 dark:text-emerald-400">
-                      Saldo Final: ${cierre.saldoFinal?.toLocaleString('es-AR')}
+                  <div className="flex items-center justify-between font-bold mb-1.5">
+                    <div>
+                      <span className="text-slate-900 dark:text-white font-extrabold text-sm block">
+                        {cierre.periodo}
+                      </span>
+                      <span className="text-xs font-mono text-slate-400">
+                        {cierre.id}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs text-slate-500 block">Saldo Final</span>
+                      <span className="font-mono text-emerald-600 dark:text-emerald-400 font-black text-sm">
+                        ${cierre.saldoFinal?.toLocaleString('es-AR')}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-slate-600 dark:text-slate-300 grid grid-cols-2 gap-1 py-1.5 border-t border-slate-200/70 dark:border-slate-700/70">
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Ingresos (+)</span>
+                      <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                        +${(cierre.ingresos || 0).toLocaleString('es-AR')}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-slate-400 block text-[11px]">Egresos (-)</span>
+                      <span className="font-mono font-bold text-rose-700 dark:text-rose-400">
+                        -${(cierre.egresos || 0).toLocaleString('es-AR')}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-slate-500 pt-1.5 border-t border-slate-200/70 dark:border-slate-700/70 flex justify-between items-center">
+                    <span className="font-mono text-xs">{cierre.fechaCierre}</span>
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      {cierre.responsable}
                     </span>
                   </div>
-                  <div className="text-[11px] text-slate-500 mt-1 flex justify-between">
-                    <span>Cierre: {cierre.fechaCierre}</span>
-                    <span>Resp: {cierre.responsable}</span>
-                  </div>
+
+                  <button
+                    onClick={() => setActaCierreTarget(cierre)}
+                    className="mt-3 w-full py-2 px-3 rounded-lg bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-600 transition flex items-center justify-center gap-2 shadow-xs"
+                  >
+                    <i className="fa-solid fa-file-invoice text-amber-600"></i>
+                    <span>Ver Acta Oficial Imprimible</span>
+                  </button>
                 </div>
               ))}
             </div>
@@ -2122,192 +2176,183 @@ export default function TesoreriaView() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL AJUSTE DE CUOTA INDIVIDUAL CON MOTIVO OBLIGATORIO DE AUDITORÍA */}
+      {/* MODAL REAJUSTE GENERAL MASIVO DE ARANCELES (10 MESES DEL CICLO LECTIVO)   */}
       {/* ========================================================================= */}
-      {cuotaAjustarTarget && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-            <div className="bg-emerald-900 text-white px-5 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <i className="fa-solid fa-pen-nib text-emerald-400"></i>
-                <div>
-                  <h3 className="font-bold text-sm sm:text-base">
-                    Ajuste de Arancel de Cuota (Tesorería)
-                  </h3>
-                  <p className="text-[11px] text-emerald-200 font-mono">
-                    Auditoría Obligatoria • Escuela Normal Superior DVS
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setCuotaAjustarTarget(null)}
-                className="text-emerald-200 hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleConfirmarAjusteCuota} className="p-5 space-y-4 text-xs">
-              {errorAjuste && (
-                <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 text-rose-700 dark:text-rose-300 rounded-xl font-semibold">
-                  {errorAjuste}
-                </div>
-              )}
-
-              <div className="bg-slate-50 dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Concepto:</span>
-                  <span className="font-bold text-slate-800 dark:text-white">
-                    {cuotaAjustarTarget.concepto}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Valor actual:</span>
-                  <span className="font-mono font-bold text-slate-800 dark:text-white">
-                    ${cuotaAjustarTarget.monto.toLocaleString('es-AR')}
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
-                  Nuevo Valor de la Cuota ($):
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="100"
-                  required
-                  value={montoCuotaAjuste}
-                  onChange={(e) => setMontoCuotaAjuste(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono text-sm outline-none focus:ring-2 focus:ring-emerald-600"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-slate-700 dark:text-slate-300 font-bold">
-                    Motivo del Ajuste (Auditoría Obligatoria):
-                  </label>
-                  <span className="text-[10px] text-rose-600 font-bold">* Requerido</span>
-                </div>
-                <textarea
-                  rows="3"
-                  required
-                  value={motivoCuotaAjuste}
-                  onChange={(e) => setMotivoCuotaAjuste(e.target.value)}
-                  placeholder="Explique la causa del cambio (ej: Beca social acordada, recargo no imputado, descuento directivo)..."
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-600 text-xs"
-                />
-              </div>
-
-              <div className="pt-2 flex justify-end space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setCuotaAjustarTarget(null)}
-                  className="px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-100"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold shadow-md flex items-center gap-1.5"
-                >
-                  <i className="fa-solid fa-check"></i>
-                  <span>Guardar y Auditar Ajuste</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL REAJUSTE GENERAL MASIVO DE CUOTAS */}
       {isGeneralModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-            <div className="bg-indigo-900 text-white px-5 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <i className="fa-solid fa-sliders text-indigo-300"></i>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="bg-indigo-900 text-white px-6 py-4 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-800 border border-indigo-700 flex items-center justify-center text-indigo-300">
+                  <i className="fa-solid fa-sliders text-lg"></i>
+                </div>
                 <div>
-                  <h3 className="font-bold text-base">Reajuste General Arancelario</h3>
-                  <p className="text-[11px] text-indigo-200 font-mono">
-                    Actualización masiva de cuotas pendientes con justificación
+                  <h3 className="font-bold text-base sm:text-lg">Reajuste General Arancelario</h3>
+                  <p className="text-xs text-indigo-200 font-mono">
+                    Actualización masiva de aranceles escolares • Ciclo Lectivo 2026
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setIsGeneralModalOpen(false)}
-                className="text-indigo-200 hover:text-white"
+                className="text-indigo-200 hover:text-white p-1 rounded-lg text-lg leading-none"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleConfirmarAjusteGeneral} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleConfirmarAjusteGeneral} className="p-6 space-y-5 overflow-y-auto text-sm">
+              {/* Selector interactivo de meses */}
               <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
-                  Alcance del Ajuste:
-                </label>
-                <select
-                  value={periodoGeneral}
-                  onChange={(e) => setPeriodoGeneral(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold outline-none"
-                >
-                  <option value="todos_pendientes">
-                    Todas las cuotas pendientes del ciclo lectivo 2026
-                  </option>
-                  <option value="2026-07">Cuota Julio 2026</option>
-                  <option value="2026-08">Cuota Agosto 2026</option>
-                  <option value="2026-09">Cuota Septiembre 2026</option>
-                  <option value="2026-10">Cuota Octubre 2026</option>
-                  <option value="2026-11">Cuota Noviembre 2026</option>
-                  <option value="2026-12">Cuota Diciembre 2026</option>
-                </select>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
+                  <label className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <i className="fa-regular fa-calendar-check text-indigo-600 dark:text-indigo-400"></i>
+                    <span>Meses de Cobro a Reajustar ({selectedPeriodosGeneral.length} de {MESES_CICLO.length} seleccionados):</span>
+                  </label>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={selectAllPeriodosGeneral}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 text-xs font-semibold transition"
+                    >
+                      Todos (10 Meses)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={deselectAllPeriodosGeneral}
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 text-xs font-semibold transition"
+                    >
+                      Deseleccionar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPeriodosGeneral(['2026-03', '2026-04', '2026-05', '2026-06'])}
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-semibold transition"
+                    >
+                      1° Semestre
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPeriodosGeneral(['2026-07', '2026-08', '2026-09', '2026-10', '2026-11', '2026-12'])}
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-semibold transition"
+                    >
+                      2° Semestre
+                    </button>
+                  </div>
+                </div>
+
+                {/* Grilla con los 10 meses del ciclo de cobro */}
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                  {MESES_CICLO.map((m) => {
+                    const isSelected = selectedPeriodosGeneral.includes(m.periodo);
+                    const pendingCount = state.cuotas.filter(
+                      (c) => c.periodo === m.periodo && c.estado !== 'pagada'
+                    ).length;
+
+                    return (
+                      <button
+                        type="button"
+                        key={m.periodo}
+                        onClick={() => togglePeriodoGeneral(m.periodo)}
+                        className={`p-3 rounded-xl border text-left transition relative flex flex-col justify-between ${
+                          isSelected
+                            ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/70 text-indigo-900 dark:text-indigo-100 shadow-xs'
+                            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-extrabold text-sm">{m.nombre}</span>
+                          <i
+                            className={`fa-solid ${
+                              isSelected
+                                ? 'fa-circle-check text-indigo-600 dark:text-indigo-400 text-base'
+                                : 'fa-circle text-slate-300 dark:text-slate-600 text-sm'
+                            }`}
+                          ></i>
+                        </div>
+                        <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                          {m.periodo}
+                        </div>
+                        <div className="mt-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                          {pendingCount} cuotas pend.
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedPeriodosGeneral.length === 0 && (
+                  <p className="text-xs text-rose-500 font-semibold mt-2">
+                    * Debe seleccionar al menos un mes de cobro para aplicar el ajuste.
+                  </p>
+                )}
               </div>
 
+              {/* Nuevo Valor Arancelario */}
               <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                   Nuevo Valor Arancelario ($):
                 </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="100"
-                  required
-                  value={montoGeneral}
-                  onChange={(e) => setMontoGeneral(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono text-sm outline-none"
-                />
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-base">$</span>
+                  <input
+                    type="number"
+                    min="100"
+                    step="100"
+                    required
+                    value={montoGeneral}
+                    onChange={(e) => setMontoGeneral(e.target.value)}
+                    className="w-full pl-8 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono text-base font-bold outline-none focus:ring-2 focus:ring-indigo-600"
+                  />
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Se actualizarán únicamente las cuotas pendientes o adeudadas. Las cuotas ya pagadas conservan su valor histórico inmutable.
+                </p>
               </div>
 
+              {/* Justificación obligatoria */}
               <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
-                  Motivo y Justificación Institucional (Obligatorio):
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                  Motivo y Justificación Institucional (Obligatorio para Auditoría):
                 </label>
                 <textarea
                   rows="3"
                   required
                   value={motivoGeneral}
                   onChange={(e) => setMotivoGeneral(e.target.value)}
-                  placeholder="Justifique el motivo del reajuste general..."
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none text-xs"
+                  placeholder="Indique la causa del reajuste general (ej: Resolución N° 04/2026 de Asamblea de Cooperadora por adecuación inflacionaria)..."
+                  className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-600 text-sm"
                 />
               </div>
 
-              <div className="pt-2 flex justify-end space-x-2">
+              {/* Panel de resumen de impacto en vivo */}
+              <div className="p-3.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/60 flex items-center justify-between text-xs text-indigo-900 dark:text-indigo-200">
+                <div className="flex items-center gap-2">
+                  <i className="fa-solid fa-circle-info text-indigo-600 dark:text-indigo-400 text-base"></i>
+                  <span>
+                    Meses seleccionados: <strong>{selectedPeriodosGeneral.length}</strong> • Cuotas pendientes a modificar: <strong>{totalCuotasAfectadas}</strong>
+                  </span>
+                </div>
+                <span className="font-mono font-bold text-indigo-700 dark:text-indigo-300 text-sm">
+                  ${Number(montoGeneral || 0).toLocaleString('es-AR')} c/u
+                </span>
+              </div>
+
+              {/* Botones de acción */}
+              <div className="pt-2 flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsGeneralModalOpen(false)}
-                  className="px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-300 font-bold"
+                  className="px-5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 text-sm transition"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl font-bold shadow-md"
+                  disabled={selectedPeriodosGeneral.length === 0 || !montoGeneral || montoGeneral <= 0}
+                  className="px-6 py-2.5 bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white rounded-xl font-bold shadow-md text-sm flex items-center gap-2 transition"
                 >
-                  Aplicar Reajuste Masivo
+                  <i className="fa-solid fa-check"></i>
+                  <span>Aplicar Reajuste Masivo</span>
                 </button>
               </div>
             </form>
@@ -2450,46 +2495,279 @@ export default function TesoreriaView() {
         </div>
       )}
 
-      {/* MODAL CIERRE PERÍODO */}
+      {/* ========================================================================= */}
+      {/* MODAL CIERRE PERÍODO CONTABLE Y CONSOLIDACIÓN FISCAL                       */}
+      {/* ========================================================================= */}
       {isCierreModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-            <div className="bg-amber-600 text-slate-950 px-5 py-4 flex items-center justify-between">
-              <h3 className="font-black text-base">Ejecutar Cierre de Período Contable</h3>
-              <button onClick={() => setIsCierreModalOpen(false)} className="font-bold">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="bg-amber-600 text-slate-950 px-6 py-4 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500 border border-amber-400 flex items-center justify-center text-slate-950">
+                  <i className="fa-solid fa-file-shield text-lg"></i>
+                </div>
+                <div>
+                  <h3 className="font-black text-base sm:text-lg">Ejecutar Cierre de Período Contable</h3>
+                  <p className="text-xs text-amber-950 font-medium">
+                    Consolidación oficial de saldos de caja escolar y bancos • ENS DVS
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsCierreModalOpen(false)}
+                className="text-slate-950 hover:bg-amber-700/20 p-1.5 rounded-lg text-lg font-bold leading-none"
+              >
                 ✕
               </button>
             </div>
-            <form onSubmit={handleConfirmarCierre} className="p-5 space-y-4 text-xs">
-              <p className="text-slate-600 dark:text-slate-300">
-                Consolida el saldo de efectivo en caja escolar y cuentas digitales al cierre del período mensual en Tesorería.
+
+            <form onSubmit={handleConfirmarCierre} className="p-6 space-y-4 overflow-y-auto text-sm">
+              <p className="text-slate-600 dark:text-slate-300 text-xs">
+                El cierre mensual consolida los fondos de efectivo en caja escolar y las cuentas digitales en banco, emitiendo el acta oficial con trazabilidad inmutable de auditoría.
               </p>
+
+              {/* Selector de período contable */}
               <div>
-                <label className="block font-bold mb-1">Nombre del Período a Cerrar:</label>
-                <input
-                  type="text"
-                  required
+                <label className="block font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                  Nombre del Período Contable:
+                </label>
+                <select
                   value={nombrePeriodoCierre}
                   onChange={(e) => setNombrePeriodoCierre(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800"
+                  className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold outline-none focus:ring-2 focus:ring-amber-500"
+                >
+                  <option value="Mayo 2026">Mayo 2026 (Período Actual)</option>
+                  <option value="Junio 2026">Junio 2026</option>
+                  <option value="Julio 2026">Julio 2026</option>
+                  <option value="Agosto 2026">Agosto 2026</option>
+                  <option value="Septiembre 2026">Septiembre 2026</option>
+                  <option value="Octubre 2026">Octubre 2026</option>
+                  <option value="Noviembre 2026">Noviembre 2026</option>
+                  <option value="Diciembre 2026">Diciembre 2026 (Cierre de Ejercicio)</option>
+                </select>
+              </div>
+
+              {/* Pre-balance Contable en Tiempo Real */}
+              <div className="rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-2.5">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-amber-900 dark:text-amber-300 flex items-center gap-2">
+                  <i className="fa-solid fa-scale-balanced"></i>
+                  Balance Contable al Cierre del Período
+                </h4>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 rounded-lg bg-white/80 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                    <span className="text-slate-500 block">Saldo Inicial Total:</span>
+                    <span className="font-mono font-bold text-slate-800 dark:text-white text-sm">
+                      ${saldoInicialTotal.toLocaleString('es-AR')}
+                    </span>
+                    <span className="text-xs text-slate-400 block mt-0.5">
+                      (Efvo: ${saldoInicialEfectivo.toLocaleString('es-AR')} • Banco: ${saldoInicialBanco.toLocaleString('es-AR')})
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-white/80 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                    <span className="text-slate-500 block">(+) Ingresos Período:</span>
+                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+                      +${ingresosTotales.toLocaleString('es-AR')}
+                    </span>
+                    <span className="text-xs text-slate-400 block mt-0.5">
+                      (Efvo: ${ingresosEfectivoCobrado.toLocaleString('es-AR')} • Banco: ${ingresosBancoValidados.toLocaleString('es-AR')})
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-white/80 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                    <span className="text-slate-500 block">(-) Egresos Asentados:</span>
+                    <span className="font-mono font-bold text-rose-600 dark:text-rose-400 text-sm">
+                      -${egresosTotales.toLocaleString('es-AR')}
+                    </span>
+                    <span className="text-xs text-slate-400 block mt-0.5">
+                      (Efvo: ${egresosEfectivo.toLocaleString('es-AR')} • Banco: ${egresosBanco.toLocaleString('es-AR')})
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
+                    <span className="text-emerald-800 dark:text-emerald-300 font-bold block">(=) Saldo Final Consolidado:</span>
+                    <span className="font-mono font-black text-emerald-700 dark:text-emerald-300 text-base">
+                      ${saldoNetoDisponible.toLocaleString('es-AR')}
+                    </span>
+                    <span className="text-xs text-emerald-600 dark:text-emerald-400 block mt-0.5">
+                      (Caja: ${efectivoEnCajaEscolar.toLocaleString('es-AR')} • Banco: ${bancosCuentasDigitales.toLocaleString('es-AR')})
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Observaciones / Dictamen de Acta */}
+              <div>
+                <label className="block font-bold text-slate-800 dark:text-slate-200 mb-1">
+                  Dictamen / Observaciones para el Acta Oficial:
+                </label>
+                <textarea
+                  rows="2"
+                  value={observacionesCierre}
+                  onChange={(e) => setObservacionesCierre(e.target.value)}
+                  placeholder="Observaciones de caja, notas de arqueo o detalles del balance mensual..."
+                  className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500 text-xs"
                 />
               </div>
-              <div className="flex justify-end space-x-2 pt-2">
+
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                <span>Responsable: <strong>Marta Rodríguez (Tesorera)</strong></span>
+                <span className="font-mono">Fecha: {new Date().toLocaleDateString('es-AR')}</span>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsCierreModalOpen(false)}
-                  className="px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-xl"
+                  className="px-5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-100 text-sm transition"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl"
+                  className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl shadow-md text-sm flex items-center gap-2 transition"
                 >
-                  Ejecutar Cierre
+                  <i className="fa-solid fa-lock"></i>
+                  <span>Asentar y Consolidar Cierre</span>
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL ACTA OFICIAL DE CIERRE CONTABLE IMPRIMIBLE                         */}
+      {/* ========================================================================= */}
+      {actaCierreTarget && (
+        <div id="modalActaCierre" className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between shrink-0 no-print">
+              <div className="flex items-center gap-2.5">
+                <i className="fa-solid fa-certificate text-amber-400 text-lg"></i>
+                <h3 className="font-bold text-base">Acta Oficial de Cierre Contable ({actaCierreTarget.periodo})</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition shadow-xs"
+                >
+                  <i className="fa-solid fa-print"></i>
+                  <span>Imprimir Acta</span>
+                </button>
+                <button
+                  onClick={() => setActaCierreTarget(null)}
+                  className="text-slate-400 hover:text-white p-1 text-lg font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div id="printActaCierreContainer" className="p-8 space-y-6 overflow-y-auto text-slate-800 dark:text-slate-100 font-sans print:p-0">
+              {/* Encabezado Institucional */}
+              <div className="text-center pb-4 border-b-2 border-slate-800 dark:border-slate-600">
+                <div className="flex items-center justify-center gap-3 mb-2">
+                  <img src="/escudo-colegio.png" alt="Escudo" className="w-12 h-12 object-contain" />
+                  <div className="text-left">
+                    <h2 className="font-black text-lg text-slate-900 dark:text-white uppercase tracking-wide">
+                      Escuela Normal Superior Dalmacio Vélez Sársfield
+                    </h2>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 font-semibold">
+                      Asociación Cooperadora Escolar • Personería Jurídica y Matrícula Oficial
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-2 inline-block px-4 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold text-xs uppercase tracking-wider font-mono">
+                  ACTA DE BALANCE MENSUAL Y CIERRE DE PERÍODO CONTABLE • {actaCierreTarget.id}
+                </div>
+              </div>
+
+              {/* Datos Generales */}
+              <div className="grid grid-cols-2 gap-4 text-xs bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                <div>
+                  <span className="text-slate-500 block">Período Contable:</span>
+                  <strong className="text-sm text-slate-900 dark:text-white">{actaCierreTarget.periodo}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Fecha y Hora de Cierre:</span>
+                  <strong className="font-mono text-sm">{actaCierreTarget.fechaCierre}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Responsable Actuante:</span>
+                  <strong className="text-slate-900 dark:text-white">{actaCierreTarget.responsable}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Estado del Acta:</span>
+                  <span className="inline-flex items-center gap-1 font-bold text-emerald-600 dark:text-emerald-400">
+                    <i className="fa-solid fa-circle-check"></i> {actaCierreTarget.estado || 'Conciliado y Firmado'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Cuadro de Liquidación y Balance */}
+              <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-100 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-300 uppercase">
+                    <tr>
+                      <th className="py-2.5 px-3 text-left">Rubro Contable</th>
+                      <th className="py-2.5 px-3 text-right">Efectivo (Caja)</th>
+                      <th className="py-2.5 px-3 text-right">Bancos / Digital</th>
+                      <th className="py-2.5 px-3 text-right">Total Consolidado</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                    <tr>
+                      <td className="py-2.5 px-3 font-semibold text-slate-700 dark:text-slate-300">Saldo Inicial</td>
+                      <td className="py-2.5 px-3 text-right font-mono">${(actaCierreTarget.saldoInicialEfectivo || 45000).toLocaleString('es-AR')}</td>
+                      <td className="py-2.5 px-3 text-right font-mono">${(actaCierreTarget.saldoInicialBanco || 80000).toLocaleString('es-AR')}</td>
+                      <td className="py-2.5 px-3 text-right font-mono font-bold">${(actaCierreTarget.saldoInicial || 125000).toLocaleString('es-AR')}</td>
+                    </tr>
+                    <tr className="bg-emerald-50/40 dark:bg-emerald-950/20">
+                      <td className="py-2.5 px-3 font-semibold text-emerald-800 dark:text-emerald-300">(+) Ingresos del Período</td>
+                      <td className="py-2.5 px-3 text-right font-mono text-emerald-700 dark:text-emerald-400">+${(actaCierreTarget.ingresosEfectivo || (actaCierreTarget.ingresos ? Math.round(actaCierreTarget.ingresos * 0.4) : 0)).toLocaleString('es-AR')}</td>
+                      <td className="py-2.5 px-3 text-right font-mono text-emerald-700 dark:text-emerald-400">+${(actaCierreTarget.ingresosBanco || (actaCierreTarget.ingresos ? Math.round(actaCierreTarget.ingresos * 0.6) : 0)).toLocaleString('es-AR')}</td>
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">+${(actaCierreTarget.ingresos || 0).toLocaleString('es-AR')}</td>
+                    </tr>
+                    <tr className="bg-rose-50/40 dark:bg-rose-950/20">
+                      <td className="py-2.5 px-3 font-semibold text-rose-800 dark:text-rose-300">(-) Egresos Asentados</td>
+                      <td className="py-2.5 px-3 text-right font-mono text-rose-700 dark:text-rose-400">-${(actaCierreTarget.egresosEfectivo || (actaCierreTarget.egresos ? Math.round(actaCierreTarget.egresos * 0.5) : 0)).toLocaleString('es-AR')}</td>
+                      <td className="py-2.5 px-3 text-right font-mono text-rose-700 dark:text-rose-400">-${(actaCierreTarget.egresosBanco || (actaCierreTarget.egresos ? Math.round(actaCierreTarget.egresos * 0.5) : 0)).toLocaleString('es-AR')}</td>
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-rose-700 dark:text-rose-400">-${(actaCierreTarget.egresos || 0).toLocaleString('es-AR')}</td>
+                    </tr>
+                    <tr className="bg-slate-100 dark:bg-slate-800 font-extrabold text-sm border-t-2 border-slate-300 dark:border-slate-600">
+                      <td className="py-3 px-3 text-slate-900 dark:text-white">(=) SALDO FINAL EN CAJA Y BANCO</td>
+                      <td className="py-3 px-3 text-right font-mono text-emerald-600 dark:text-emerald-400">${(actaCierreTarget.saldoFinalEfectivo || Math.round(actaCierreTarget.saldoFinal * 0.35)).toLocaleString('es-AR')}</td>
+                      <td className="py-3 px-3 text-right font-mono text-indigo-600 dark:text-indigo-400">${(actaCierreTarget.saldoFinalBanco || Math.round(actaCierreTarget.saldoFinal * 0.65)).toLocaleString('es-AR')}</td>
+                      <td className="py-3 px-3 text-right font-mono text-slate-900 dark:text-white font-black text-base">${actaCierreTarget.saldoFinal?.toLocaleString('es-AR')}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Dictamen / Observaciones */}
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                <span className="font-bold block text-slate-700 dark:text-slate-300 mb-1">Dictamen y Observaciones:</span>
+                <p className="text-slate-600 dark:text-slate-400 italic">
+                  "{actaCierreTarget.observaciones || 'Cierre de período ordinario visado conforme normas contables de Cooperadora Escolar sin discrepancias.'}"
+                </p>
+              </div>
+
+              {/* Firmas y Sellos Institucionales */}
+              <div className="pt-8 grid grid-cols-2 gap-8 text-center text-xs">
+                <div>
+                  <div className="border-b border-slate-400 w-44 mx-auto mb-2"></div>
+                  <strong className="block text-slate-800 dark:text-slate-200">{actaCierreTarget.responsable}</strong>
+                  <span className="text-slate-500">Tesorera de Cooperadora</span>
+                </div>
+                <div>
+                  <div className="border-b border-slate-400 w-44 mx-auto mb-2"></div>
+                  <strong className="block text-slate-800 dark:text-slate-200">Lic. Jorge Domínguez</strong>
+                  <span className="text-slate-500">Presidente / Dirección ENS DVS</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

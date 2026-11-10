@@ -1,5 +1,40 @@
+/* ========================================================================= */
+/* MEJORA GLOBAL DE LEGIBILIDAD Y TAMAÑO DE TEXTO (SISTEMA DE COOPERADORA)  */
+/* ========================================================================= */
+:root {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  font-size: 0.95rem; /* ~15.2px para máxima comodidad de lectura */
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Evitar textos microscópicos que dificulten la lectura en pantallas escolares */
+.text-\[10px\],
+.text-\[11px\] {
+  font-size: 0.75rem !important; /* Mínimo 12px legible */
+  line-height: 1.15rem !important;
+}
+
+.text-xs {
+  font-size: 0.8125rem !important; /* Elevar text-xs de 12px a 13px para lectura descansada */
+  line-height: 1.25rem !important;
+}
+
+/* Formularios, inputs y botones con tipografía clara y legible */
+input,
+select,
+textarea {
+  font-size: 0.9rem !important;
+}
+
+button {
+  font-size: 0.875rem;
 }
 
 .tabular-nums {
@@ -37,6 +72,28 @@ body {
     page-break-inside: avoid;
   }
   #printReceiptContainer * {
+    color: #0f172a !important;
+  }
+  #modalActaCierre {
+    position: static !important;
+    display: block !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  #printActaCierreContainer {
+    display: block !important;
+    visibility: visible !important;
+    padding: 10mm 14mm !important;
+    border: 2px solid #0f172a !important;
+    border-radius: 8px !important;
+    background: white !important;
+    color: #0f172a !important;
+    page-break-inside: avoid;
+  }
+  #printActaCierreContainer * {
     color: #0f172a !important;
   }
 }

@@ -707,7 +707,7 @@ export function CooperadoraProvider({ children }) {
   };
 
   // 4. MÓDULO DE TESORERÍA: Reajuste general / masivo de cuotas con trazabilidad
-  const ajustarCuotasGeneral = ({ periodo, nuevoMonto, motivoAjuste }) => {
+  const ajustarCuotasGeneral = ({ periodos, periodo, nuevoMonto, motivoAjuste }) => {
     const rolActual = state.role;
     if (rolActual !== 'tesorero' && rolActual !== 'admin') {
       showToast('Acceso denegado: Solo Tesorería puede realizar reajustes generales de cuotas.', 'warning');
@@ -725,32 +725,44 @@ export function CooperadoraProvider({ children }) {
       return { ok: false, error: 'Monto inválido' };
     }
 
+    let periodosArray = [];
+    if (Array.isArray(periodos) && periodos.length > 0) {
+      periodosArray = periodos;
+    } else if (periodo) {
+      periodosArray = [periodo];
+    } else {
+      periodosArray = ['todos_pendientes'];
+    }
+
+    const esTodos = periodosArray.includes('todos_pendientes');
+
     const cuotasFiltradas = state.cuotas.filter((c) => {
-      const matchPeriodo = periodo === 'todos_pendientes' || c.periodo === periodo;
+      const matchPeriodo = esTodos || periodosArray.includes(c.periodo);
       return matchPeriodo && c.estado !== 'pagada';
     });
 
     if (cuotasFiltradas.length === 0) {
-      showToast('No se encontraron cuotas pendientes para aplicar el ajuste general.', 'warning');
+      showToast('No se encontraron cuotas pendientes para los meses seleccionados.', 'warning');
       return { ok: false, error: 'Sin cuotas a modificar' };
     }
 
     const fechaHora = new Date().toISOString().replace('T', ' ').slice(0, 16);
     const usuarioResponsable = state.currentUser?.cargo || `${state.currentUser?.nombre} (Tesorería)`;
+    const descripcionPeriodos = esTodos ? 'Todos los meses pendientes' : periodosArray.join(', ');
 
     setState((prev) => ({
       ...prev,
       cuotas: prev.cuotas.map((c) => {
-        const matchPeriodo = periodo === 'todos_pendientes' || c.periodo === periodo;
+        const matchPeriodo = esTodos || periodosArray.includes(c.periodo);
         if (!matchPeriodo || c.estado === 'pagada') return c;
 
         const ajusteObj = {
-          id: `AJU-GEN-${Date.now().toString().slice(-6)}`,
+          id: `AJU-GEN-${Date.now().toString().slice(-6)}-${c.id.slice(-4)}`,
           fecha: fechaHora,
           usuario: usuarioResponsable,
           montoAnterior: c.monto,
           montoNuevo: montoNum,
-          motivo: `[Ajuste General: ${periodo}] ${motivoAjuste.trim()}`
+          motivo: `[Ajuste General: ${c.periodo}] ${motivoAjuste.trim()}`
         };
 
         return {
@@ -763,13 +775,13 @@ export function CooperadoraProvider({ children }) {
         createAuditEntry(
           usuarioResponsable,
           'AJUSTE_GENERAL_ARANCELES',
-          `Reajuste arancelario general ejecutado sobre ${cuotasFiltradas.length} cuotas pendientes (${periodo}). Nuevo valor fijado: $${montoNum.toLocaleString('es-AR')}. Motivo: "${motivoAjuste.trim()}".`
+          `Reajuste general sobre ${cuotasFiltradas.length} cuotas pendientes (${descripcionPeriodos}). Nuevo valor fijado: $${montoNum.toLocaleString('es-AR')}. Motivo: "${motivoAjuste.trim()}".`
         ),
         ...prev.auditLogs
       ]
     }));
 
-    showToast(`Ajuste general aplicado con éxito a ${cuotasFiltradas.length} cuotas.`, 'success');
+    showToast(`Ajuste general aplicado con éxito a ${cuotasFiltradas.length} cuotas (${descripcionPeriodos}).`, 'success');
     return { ok: true, cuotasAfectadas: cuotasFiltradas.length };
   };
 
@@ -1446,33 +1458,67 @@ export function CooperadoraProvider({ children }) {
     showToast(`Egreso ${nuevoEgreso.id} asentado en Tesorería (${nuevoEgreso.medioPago}).`, 'success');
   };
 
-  const cerrarPeriodoTesoreria = (nombrePeriodo) => {
+  const cerrarPeriodoTesoreria = (cierreData) => {
     if (state.role !== 'tesorero' && state.role !== 'admin') {
       showToast('Solo Tesorería está autorizada a cerrar períodos contables.', 'warning');
-      return;
+      return { ok: false, error: 'Permisos insuficientes' };
     }
-    const ingresosValidos = state.pagos
-      .filter((p) => String(p.estado || '').toUpperCase() !== 'ANULADO')
+
+    const isObject = typeof cierreData === 'object' && cierreData !== null;
+    const nombrePeriodo = isObject ? (cierreData.periodo || state.tesoreria.periodoActual) : (cierreData || state.tesoreria.periodoActual);
+    const observaciones = isObject ? (cierreData.observaciones || '') : '';
+
+    const pagosValidos = state.pagos.filter((p) => String(p.estado || '').toUpperCase() !== 'ANULADO');
+    const ingresosEfectivo = pagosValidos
+      .filter((p) => p.medio === 'Efectivo')
       .reduce((acc, p) => acc + p.montoTotal, 0);
-    const egresosTotales = (state.tesoreria.egresos || []).reduce(
-      (acc, e) => acc + e.importe,
-      0
-    );
-    const saldoInicial = state.tesoreria.saldoInicial || 0;
-    const saldoFinal = saldoInicial + ingresosValidos - egresosTotales;
+    const ingresosBanco = pagosValidos
+      .filter((p) => p.medio !== 'Efectivo')
+      .reduce((acc, p) => acc + p.montoTotal, 0);
+    const ingresosValidos = ingresosEfectivo + ingresosBanco;
+
+    const egresosList = state.tesoreria.egresos || [];
+    const egresosEfectivo = egresosList
+      .filter((e) => e.medioPago === 'Efectivo')
+      .reduce((acc, e) => acc + e.importe, 0);
+    const egresosBanco = egresosList
+      .filter((e) => e.medioPago !== 'Efectivo')
+      .reduce((acc, e) => acc + e.importe, 0);
+    const egresosTotales = egresosEfectivo + egresosBanco;
+
+    const saldoInicialEfectivo = state.tesoreria.saldoInicialEfectivo ?? 250000;
+    const saldoInicialBanco = state.tesoreria.saldoInicialBanco ?? 680000;
+    const saldoInicial = state.tesoreria.saldoInicial || (saldoInicialEfectivo + saldoInicialBanco);
+
+    const saldoFinalEfectivo = saldoInicialEfectivo + ingresosEfectivo - egresosEfectivo;
+    const saldoFinalBanco = saldoInicialBanco + ingresosBanco - egresosBanco;
+    const saldoFinal = saldoFinalEfectivo + saldoFinalBanco;
+
+    const fechaHora =
+      new Date().toISOString().split('T')[0] +
+      ' ' +
+      new Date().toTimeString().split(' ')[0].slice(0, 5);
+    const responsable = state.currentUser?.cargo || `${state.currentUser?.nombre || 'Marta Rodríguez'} (Tesorera)`;
 
     const nuevoCierre = {
       id: `CIE-${Date.now().toString().slice(-5)}`,
-      periodo: nombrePeriodo || state.tesoreria.periodoActual,
-      fechaCierre:
-        new Date().toISOString().split('T')[0] +
-        ' ' +
-        new Date().toTimeString().split(' ')[0].slice(0, 5),
+      periodo: nombrePeriodo,
+      fechaCierre: fechaHora,
       saldoInicial,
+      saldoInicialEfectivo,
+      saldoInicialBanco,
       ingresos: ingresosValidos,
+      ingresosEfectivo,
+      ingresosBanco,
       egresos: egresosTotales,
+      egresosEfectivo,
+      egresosBanco,
       saldoFinal,
-      responsable: state.currentUser?.nombre || 'Marta Rodríguez (Tesorera)'
+      saldoFinalEfectivo,
+      saldoFinalBanco,
+      observaciones: observaciones || 'Cierre contable ordinario asentado y certificado por Tesorería.',
+      responsable,
+      estado: 'Conciliado y Firmado'
     };
 
     setState((prev) => ({
@@ -1485,13 +1531,13 @@ export function CooperadoraProvider({ children }) {
         createAuditEntry(
           'Tesorería',
           'CIERRE_PERIODO',
-          `Cierre contable "${nuevoCierre.periodo}" consolidado. Saldo final en caja: $${saldoFinal.toLocaleString('es-AR')}.`
+          `Cierre contable "${nuevoCierre.periodo}" consolidado. Efectivo en caja: $${saldoFinalEfectivo.toLocaleString('es-AR')}, Bancos/Digital: $${saldoFinalBanco.toLocaleString('es-AR')}. Saldo Final Total: $${saldoFinal.toLocaleString('es-AR')}.`
         ),
         ...prev.auditLogs
       ]
     }));
-
-    showToast(`Período "${nuevoCierre.periodo}" cerrado y balance consolidado.`, 'success');
+    showToast(`Cierre de período "${nuevoCierre.periodo}" asentado con éxito.`, 'success');
+    return { ok: true, cierre: nuevoCierre };
   };
 
   // --- RESPALDOS Y EXPORTACIÓN CON IDENTIDAD INSTITUCIONAL ACTUALIZADA ---

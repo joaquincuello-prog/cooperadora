@@ -17,6 +17,7 @@ export default function RecepcionView() {
     getStudentSiblings,
     hasSiblingDiscount,
     selectStudent,
+    setActiveTab,
     toggleCuotaSelection,
     selectAllPendingForStudent,
     registrarCobro,
@@ -25,7 +26,6 @@ export default function RecepcionView() {
     setPreviewComprobante
   } = useCooperadora();
 
-  const [searchTerm, setSearchTerm] = useState('');
   const [isCobroModalOpen, setIsCobroModalOpen] = useState(false);
   const [isCuotaModalOpen, setIsCuotaModalOpen] = useState(false);
 
@@ -50,17 +50,6 @@ export default function RecepcionView() {
   const [cuotaMonto, setCuotaMonto] = useState(CUOTA_BASE);
 
   const canOperate = state.role === 'secretaria' || state.role === 'tesorero' || state.role === 'admin';
-
-  const filteredStudents = state.alumnos.filter((a) => {
-    const q = searchTerm.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      a.apellido.toLowerCase().includes(q) ||
-      a.nombre.toLowerCase().includes(q) ||
-      a.dni.includes(q) ||
-      a.curso.toLowerCase().includes(q)
-    );
-  });
 
   const currentStudent =
     getStudent(state.selectedStudentId) || state.alumnos[0];
@@ -188,150 +177,47 @@ export default function RecepcionView() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        {/* COLUMNA IZQUIERDA: BUSCADOR PREDICTIVO DE ALUMNOS (HU-03 / RF-06) */}
-        <div className="lg:col-span-4 space-y-5">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                <i className="fa-solid fa-magnifying-glass text-emerald-600"></i>
-                Búsqueda Predictiva de Alumnos
-              </h2>
-              <span className="text-[11px] bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-semibold px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
-                {state.alumnos.length} Matriculados
-              </span>
-            </div>
-
-            <div className="relative mb-3">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                <i className="fa-solid fa-search text-xs"></i>
-              </span>
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Filtrar por nombre, apellido, DNI o curso..."
-                className="w-full pl-8 pr-8 py-2.5 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-600 transition"
-              />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-
-            {/* Accesos rápidos de prueba */}
-            <div className="mb-3">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                Acceso Rápido Familiar (Beneficio 20%):
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  onClick={() => selectStudent('alu-1')}
-                  className={`text-xs px-2.5 py-1 rounded-lg font-medium border transition ${
-                    currentStudent?.id === 'alu-1'
-                      ? 'bg-emerald-600 text-white border-emerald-600 font-bold'
-                      : 'bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-300 border-emerald-200'
-                  }`}
-                >
-                  Gómez, Lucas (Hermano -20%)
-                </button>
-                <button
-                  onClick={() => selectStudent('alu-3')}
-                  className={`text-xs px-2.5 py-1 rounded-lg font-medium border transition ${
-                    currentStudent?.id === 'alu-3'
-                      ? 'bg-emerald-600 text-white border-emerald-600 font-bold'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200'
-                  }`}
-                >
-                  Benítez, Martina (Regular)
-                </button>
-              </div>
-            </div>
-
-            {/* Lista de resultados con selector en tiempo real */}
-            <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-80 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700">
-              {filteredStudents.length === 0 ? (
-                <div className="p-4 text-center text-xs text-slate-400">
-                  No se encontraron estudiantes coincidentes.
+      {/* ESTADO DE CUENTA Y ACCIONES DE COBRANZA (Ancho completo, la búsqueda se realiza en el Padrón) */}
+      <div className="space-y-6">
+        {currentStudent && (
+          <>
+            {/* Tarjeta de Información del Alumno y Tutor */}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div>
+                  <span className="text-[10px] uppercase font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                    Escuela Normal Superior Dalmacio Vélez Sársfield • Ventanilla de Cobranza
+                  </span>
+                  <h2 className="text-xl font-black text-slate-900 dark:text-white">
+                    {currentStudent.apellido}, {currentStudent.nombre}
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                    DNI: {currentStudent.dni} • Año Lectivo: {currentStudent.anioLectivo || '2026'} • Curso: {currentStudent.curso} "{currentStudent.division}" • Turno: {currentStudent.turno}
+                  </p>
                 </div>
-              ) : (
-                filteredStudents.map((alu) => {
-                  const isSelected = currentStudent?.id === alu.id;
-                  const hasSibs = hasSiblingDiscount(alu.id);
-                  const aluCuotas = getStudentCuotas(alu.id);
-                  const vencidasCount = aluCuotas.filter((c) => c.estado === 'vencida').length;
-                  const impagasCount = aluCuotas.filter((c) => c.estado !== 'pagada').length;
 
-                  return (
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('padron')}
+                    className="px-3.5 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 text-xs font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1.5 transition"
+                    title="Ir al Padrón Institucional para filtrar por Año, Curso, División o DNI"
+                  >
+                    <i className="fa-solid fa-users-rectangle"></i>
+                    <span>Buscar / Cambiar Alumno en Padrón</span>
+                  </button>
+
+                  {canOperate && (
                     <button
-                      key={alu.id}
-                      onClick={() => selectStudent(alu.id)}
-                      className={`w-full text-left p-3 transition-colors ${
-                        isSelected
-                          ? 'bg-emerald-50 dark:bg-emerald-950/60 border-l-4 border-l-emerald-600 text-slate-900 dark:text-white'
-                          : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-300'
-                      }`}
+                      onClick={() => setIsCuotaModalOpen(true)}
+                      className="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition"
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-xs">
-                          {alu.apellido}, {alu.nombre}
-                        </span>
-                        {hasSibs && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
-                            -20% Hnos
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono mt-0.5">
-                        <span>DNI {alu.dni} • {alu.curso} "{alu.division}"</span>
-                        <span className={vencidasCount > 0 ? 'text-rose-600 font-bold' : ''}>
-                          {impagasCount} pend.
-                        </span>
-                      </div>
+                      <i className="fa-solid fa-plus"></i>
+                      <span>+ Cargo Extraordinario</span>
                     </button>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* COLUMNA DERECHA: ESTADO DE CUENTA Y ACCIONES DE COBRANZA */}
-        <div className="lg:col-span-8 space-y-6">
-          {currentStudent && (
-            <>
-              {/* Tarjeta de Información del Alumno y Tutor */}
-              <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
-                  <div>
-                    <span className="text-[10px] uppercase font-mono font-bold text-emerald-700 dark:text-emerald-400">
-                      Escuela Normal Superior Dalmacio Vélez Sársfield
-                    </span>
-                    <h2 className="text-xl font-black text-slate-900 dark:text-white">
-                      {currentStudent.apellido}, {currentStudent.nombre}
-                    </h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-                      DNI: {currentStudent.dni} • Curso: {currentStudent.curso} "{currentStudent.division}" • Turno: {currentStudent.turno}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {canOperate && (
-                      <button
-                        onClick={() => setIsCuotaModalOpen(true)}
-                        className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition"
-                      >
-                        <i className="fa-solid fa-plus"></i>
-                        <span>+ Cargo Extraordinario</span>
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </div>
+              </div>
 
                 {/* Datos del Socio Tutor y Bonificaciones */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-xs">
@@ -626,7 +512,6 @@ export default function RecepcionView() {
             </>
           )}
         </div>
-      </div>
 
       {/* ========================================================================= */}
       {/* MODAL DE COBRO Y EMISIÓN DE RECIBO CON SUBIDA DE COMPROBANTE DE TRANSFERENCIA */}

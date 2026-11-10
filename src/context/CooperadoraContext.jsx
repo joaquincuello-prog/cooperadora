@@ -779,6 +779,16 @@ export function CooperadoraProvider({ children }) {
     let nuevosTutores = [...state.tutores];
 
     if (tutorMode === 'nuevo') {
+      if (
+        !nuevoTutorData?.nombre?.trim() ||
+        !nuevoTutorData?.apellido?.trim() ||
+        !nuevoTutorData?.dni?.trim() ||
+        !nuevoTutorData?.telefono?.trim() ||
+        !nuevoTutorData?.email?.trim()
+      ) {
+        showToast('Todos los datos del nuevo tutor (Nombre, Apellido, DNI, Teléfono y Gmail/Correo) son obligatorios.', 'warning');
+        return null;
+      }
       targetTutorId = `tut-${state.tutores.length + 1}`;
       const nuevoTutor = {
         id: targetTutorId,
@@ -786,8 +796,8 @@ export function CooperadoraProvider({ children }) {
         nombre: nuevoTutorData.nombre.trim(),
         apellido: nuevoTutorData.apellido.trim(),
         dni: nuevoTutorData.dni.trim(),
-        telefono: nuevoTutorData.telefono?.trim() || 'S/D',
-        email: nuevoTutorData.email?.trim() || 'S/D',
+        telefono: nuevoTutorData.telefono.trim(),
+        email: nuevoTutorData.email.trim(),
         fechaAlta: new Date().toISOString().split('T')[0],
         estado: 'Activo'
       };
@@ -800,6 +810,7 @@ export function CooperadoraProvider({ children }) {
       nombre: alumnoData.nombre.trim(),
       apellido: alumnoData.apellido.trim(),
       dni: alumnoData.dni.trim(),
+      anioLectivo: alumnoData.anioLectivo || '2026',
       curso: alumnoData.curso,
       division: alumnoData.division,
       turno: alumnoData.turno,
@@ -841,12 +852,33 @@ export function CooperadoraProvider({ children }) {
 
   // 6. Socio.actualizarDatos() y Alta independiente de Socio/Tutor
   const guardarTutor = (tutorData) => {
+    if (
+      !tutorData?.nombre?.trim() ||
+      !tutorData?.apellido?.trim() ||
+      !tutorData?.dni?.trim() ||
+      !tutorData?.telefono?.trim() ||
+      !tutorData?.email?.trim()
+    ) {
+      showToast('Complete todos los campos obligatorios del tutor: Nombre, Apellido, DNI, Teléfono y Gmail/Correo.', 'warning');
+      return false;
+    }
+
     const isEdit = Boolean(tutorData.id);
     if (isEdit) {
       setState((prev) => ({
         ...prev,
         tutores: prev.tutores.map((t) =>
-          t.id === tutorData.id ? { ...t, ...tutorData } : t
+          t.id === tutorData.id
+            ? {
+                ...t,
+                ...tutorData,
+                nombre: tutorData.nombre.trim(),
+                apellido: tutorData.apellido.trim(),
+                dni: tutorData.dni.trim(),
+                telefono: tutorData.telefono.trim(),
+                email: tutorData.email.trim()
+              }
+            : t
         ),
         auditLogs: [
           createAuditEntry(
@@ -858,6 +890,7 @@ export function CooperadoraProvider({ children }) {
         ]
       }));
       showToast(`Datos del socio/tutor ${tutorData.apellido} actualizados.`, 'success');
+      return true;
     } else {
       const newId = `tut-${state.tutores.length + 1}`;
       const nuevoSocio = {
@@ -866,8 +899,8 @@ export function CooperadoraProvider({ children }) {
         nombre: tutorData.nombre.trim(),
         apellido: tutorData.apellido.trim(),
         dni: tutorData.dni.trim(),
-        telefono: tutorData.telefono?.trim() || 'S/D',
-        email: tutorData.email?.trim() || 'S/D',
+        telefono: tutorData.telefono.trim(),
+        email: tutorData.email.trim(),
         fechaAlta: new Date().toISOString().split('T')[0],
         estado: tutorData.estado || 'Activo'
       };
@@ -884,6 +917,7 @@ export function CooperadoraProvider({ children }) {
         ]
       }));
       showToast(`Nuevo socio/tutor registrado: ${nuevoSocio.apellido}, ${nuevoSocio.nombre}`, 'success');
+      return true;
     }
   };
 
@@ -901,6 +935,7 @@ export function CooperadoraProvider({ children }) {
               nombre: alumnoData.nombre.trim(),
               apellido: alumnoData.apellido.trim(),
               dni: alumnoData.dni.trim(),
+              anioLectivo: alumnoData.anioLectivo || a.anioLectivo || '2026',
               curso: alumnoData.curso,
               division: alumnoData.division,
               turno: alumnoData.turno

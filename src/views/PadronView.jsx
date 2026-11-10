@@ -20,16 +20,21 @@ export default function PadronView() {
   } = useCooperadora();
 
   // -------------------------------------------------------------
-  // ESTADOS DE NAVEGACIÓN Y FILTRADO
+  // ESTADOS DE NAVEGACIÓN Y FILTRADO (AÑO, CURSO, DIVISIÓN Y DNI/NOMBRE)
   // -------------------------------------------------------------
   const [subTab, setSubTab] = useState('estudiantes'); // 'estudiantes' | 'tutores'
   const [search, setSearch] = useState('');
+  const [anioFilter, setAnioFilter] = useState('todos');
   const [cursoFilter, setCursoFilter] = useState('todos');
+  const [divisionFilter, setDivisionFilter] = useState('todos');
   const [estadoFilter, setEstadoFilter] = useState('todos');
   const [hermanoFilter, setHermanoFilter] = useState('todos');
 
-  // Filtro de búsqueda en Padrón de Tutores
+  // Filtros de búsqueda en Padrón de Tutores (por DNI/Nombre y por Año, Curso y División de sus hijos)
   const [tutorSearch, setTutorSearch] = useState('');
+  const [tutorAnioFilter, setTutorAnioFilter] = useState('todos');
+  const [tutorCursoFilter, setTutorCursoFilter] = useState('todos');
+  const [tutorDivisionFilter, setTutorDivisionFilter] = useState('todos');
 
   // -------------------------------------------------------------
   // ESTADOS DE PAGINACIÓN (ESTUDIANTES)
@@ -40,7 +45,7 @@ export default function PadronView() {
   // Reiniciar a la primera página cuando cambian los filtros
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, cursoFilter, estadoFilter, hermanoFilter, subTab]);
+  }, [search, anioFilter, cursoFilter, divisionFilter, estadoFilter, hermanoFilter, subTab]);
 
   // -------------------------------------------------------------
   // ESTADOS DE SELECCIÓN MÚLTIPLE (ACCIONES EN LOTE)
@@ -70,20 +75,24 @@ export default function PadronView() {
   const [aluNombre, setAluNombre] = useState('');
   const [aluApellido, setAluApellido] = useState('');
   const [aluDni, setAluDni] = useState('');
+  const [aluAnioLectivo, setAluAnioLectivo] = useState('2026');
   const [aluCurso, setAluCurso] = useState('1° Año');
   const [aluDivision, setAluDivision] = useState('A');
   const [aluTurno, setAluTurno] = useState('Mañana');
   const [tutorMode, setTutorMode] = useState('existente');
   const [tutorExistenteId, setTutorExistenteId] = useState(state.tutores[0]?.id || 'tut-1');
+  const [tutorExistenteSearch, setTutorExistenteSearch] = useState('');
   const [nuevoTutNombre, setNuevoTutNombre] = useState('');
   const [nuevoTutApellido, setNuevoTutApellido] = useState('');
   const [nuevoTutDni, setNuevoTutDni] = useState('');
   const [nuevoTutTel, setNuevoTutTel] = useState('');
   const [nuevoTutEmail, setNuevoTutEmail] = useState('');
+  const [matricularError, setMatricularError] = useState('');
 
   // 2. Modal Nuevo / Editar Socio Tutor
   const [isTutorModalOpen, setIsTutorModalOpen] = useState(false);
   const [editingTutor, setEditingTutor] = useState(null);
+  const [tutorFormError, setTutorFormError] = useState('');
 
   // 3. Modal Solicitar Baja de Matrícula
   const [isBajaModalOpen, setIsBajaModalOpen] = useState(false);
@@ -106,6 +115,7 @@ export default function PadronView() {
   const [isVinculoModalOpen, setIsVinculoModalOpen] = useState(false);
   const [targetStudentForVinculo, setTargetStudentForVinculo] = useState(null);
   const [selectedNuevoTutorId, setSelectedNuevoTutorId] = useState('');
+  const [vinculoTutorSearch, setVinculoTutorSearch] = useState('');
 
   // 7. Modal Constancias en Lote
   const [isConstanciaBatchModalOpen, setIsConstanciaBatchModalOpen] = useState(false);
@@ -124,6 +134,7 @@ export default function PadronView() {
       const cuotas = getStudentCuotas(alu.id);
       const vencidas = cuotas.filter((c) => c.estado === 'vencida').length;
       const estadoMatricula = alu.estado_matricula || 'Regular';
+      const anioAlu = String(alu.anioLectivo || '2026');
 
       const q = search.trim().toLowerCase();
       const matchesSearch =
@@ -135,7 +146,9 @@ export default function PadronView() {
           (`${tutor.apellido} ${tutor.nombre}`.toLowerCase().includes(q) ||
             tutor.dni.replace(/\./g, '').includes(q.replace(/\./g, ''))));
 
+      const matchesAnio = anioFilter === 'todos' || anioAlu === anioFilter;
       const matchesCurso = cursoFilter === 'todos' || alu.curso === cursoFilter;
+      const matchesDivision = divisionFilter === 'todos' || alu.division === divisionFilter;
 
       let matchesEstado = true;
       if (estadoFilter === 'aldia') {
@@ -153,9 +166,26 @@ export default function PadronView() {
         (hermanoFilter === 'con_hermanos' && siblings.length > 0) ||
         (hermanoFilter === 'hijo_unico' && siblings.length === 0);
 
-      return matchesSearch && matchesCurso && matchesEstado && matchesHermano;
+      return (
+        matchesSearch &&
+        matchesAnio &&
+        matchesCurso &&
+        matchesDivision &&
+        matchesEstado &&
+        matchesHermano
+      );
     });
-  }, [state.alumnos, state.tutores, state.cuotas, search, cursoFilter, estadoFilter, hermanoFilter]);
+  }, [
+    state.alumnos,
+    state.tutores,
+    state.cuotas,
+    search,
+    anioFilter,
+    cursoFilter,
+    divisionFilter,
+    estadoFilter,
+    hermanoFilter
+  ]);
 
   // Paginación de Estudiantes
   const totalRecords = filteredAlumnos.length;
@@ -167,20 +197,88 @@ export default function PadronView() {
   }, [filteredAlumnos, startIndex, endIndex]);
 
   // -------------------------------------------------------------
-  // FILTRADO DE TUTORES / SOCIOS
+  // FILTRADO DE TUTORES / SOCIOS (POR NOMBRE/DNI Y POR AÑO, CURSO Y DIVISIÓN DE HIJOS)
   // -------------------------------------------------------------
   const filteredTutores = useMemo(() => {
     const q = tutorSearch.trim().toLowerCase();
-    if (!q) return state.tutores;
-    return state.tutores.filter(
-      (tut) =>
+    return state.tutores.filter((tut) => {
+      const hijos = state.alumnos.filter((a) => a.tutorId === tut.id);
+
+      const matchesText =
+        !q ||
         tut.apellido.toLowerCase().includes(q) ||
         tut.nombre.toLowerCase().includes(q) ||
+        `${tut.apellido} ${tut.nombre}`.toLowerCase().includes(q) ||
+        `${tut.nombre} ${tut.apellido}`.toLowerCase().includes(q) ||
         tut.dni.replace(/\./g, '').includes(q.replace(/\./g, '')) ||
         (tut.telefono && tut.telefono.toLowerCase().includes(q)) ||
-        (tut.email && tut.email.toLowerCase().includes(q))
-    );
-  }, [state.tutores, tutorSearch]);
+        (tut.email && tut.email.toLowerCase().includes(q)) ||
+        hijos.some(
+          (h) =>
+            h.nombre.toLowerCase().includes(q) ||
+            h.apellido.toLowerCase().includes(q) ||
+            h.dni.replace(/\./g, '').includes(q.replace(/\./g, ''))
+        );
+
+      const hasAcademicFilter =
+        tutorAnioFilter !== 'todos' ||
+        tutorCursoFilter !== 'todos' ||
+        tutorDivisionFilter !== 'todos';
+
+      const matchesAcademic =
+        !hasAcademicFilter ||
+        hijos.some((h) => {
+          const matchAnio =
+            tutorAnioFilter === 'todos' || String(h.anioLectivo || '2026') === tutorAnioFilter;
+          const matchCurso = tutorCursoFilter === 'todos' || h.curso === tutorCursoFilter;
+          const matchDiv = tutorDivisionFilter === 'todos' || h.division === tutorDivisionFilter;
+          return matchAnio && matchCurso && matchDiv;
+        });
+
+      return matchesText && matchesAcademic;
+    });
+  }, [
+    state.tutores,
+    state.alumnos,
+    tutorSearch,
+    tutorAnioFilter,
+    tutorCursoFilter,
+    tutorDivisionFilter
+  ]);
+
+  // Buscador de tutores existentes para el modal de Matricular Estudiante
+  const matchingTutoresParaMatricula = useMemo(() => {
+    const q = tutorExistenteSearch.trim().toLowerCase();
+    const cleanQ = q.replace(/[.\-\s]/g, '');
+    if (!q) return state.tutores;
+    return state.tutores.filter((t) => {
+      const full1 = `${t.apellido} ${t.nombre}`.toLowerCase();
+      const full2 = `${t.nombre} ${t.apellido}`.toLowerCase();
+      const cleanDni = String(t.dni || '').replace(/[.\-\s]/g, '').toLowerCase();
+      return (
+        full1.includes(q) ||
+        full2.includes(q) ||
+        (cleanQ && cleanDni.includes(cleanQ))
+      );
+    });
+  }, [state.tutores, tutorExistenteSearch]);
+
+  // Buscador de tutores existentes para el modal de Gestionar Vínculo Familiar
+  const matchingTutoresParaVinculo = useMemo(() => {
+    const q = vinculoTutorSearch.trim().toLowerCase();
+    const cleanQ = q.replace(/[.\-\s]/g, '');
+    if (!q) return state.tutores;
+    return state.tutores.filter((t) => {
+      const full1 = `${t.apellido} ${t.nombre}`.toLowerCase();
+      const full2 = `${t.nombre} ${t.apellido}`.toLowerCase();
+      const cleanDni = String(t.dni || '').replace(/[.\-\s]/g, '').toLowerCase();
+      return (
+        full1.includes(q) ||
+        full2.includes(q) ||
+        (cleanQ && cleanDni.includes(cleanQ))
+      );
+    });
+  }, [state.tutores, vinculoTutorSearch]);
 
   // -------------------------------------------------------------
   // MANEJADORES DE SELECCIÓN MÚLTIPLE
@@ -273,6 +371,7 @@ export default function PadronView() {
   // GESTIÓN DE MODALES
   // -------------------------------------------------------------
   const handleOpenNewTutor = () => {
+    setTutorFormError('');
     setEditingTutor({
       id: '',
       nombre: '',
@@ -286,26 +385,87 @@ export default function PadronView() {
   };
 
   const handleOpenEditTutor = (tutor) => {
-    setEditingTutor({ ...tutor });
+    setTutorFormError('');
+    setEditingTutor({
+      ...tutor,
+      telefono: tutor.telefono === 'S/D' ? '' : tutor.telefono || '',
+      email: tutor.email === 'S/D' ? '' : tutor.email || ''
+    });
     setIsTutorModalOpen(true);
   };
 
   const handleSaveTutor = (e) => {
     e.preventDefault();
-    if (!editingTutor.nombre.trim() || !editingTutor.apellido.trim() || !editingTutor.dni.trim()) return;
-    guardarTutor(editingTutor);
-    setIsTutorModalOpen(false);
+    setTutorFormError('');
+    const nombreClean = (editingTutor.nombre || '').trim();
+    const apellidoClean = (editingTutor.apellido || '').trim();
+    const dniClean = (editingTutor.dni || '').trim();
+    const telClean = (editingTutor.telefono || '').trim();
+    const emailClean = (editingTutor.email || '').trim();
+
+    if (!nombreClean || !apellidoClean || !dniClean || !telClean || !emailClean) {
+      setTutorFormError(
+        'Todos los campos son obligatorios antes de confirmar: Nombre, Apellido, DNI, Número de Teléfono y Correo Electrónico (Gmail).'
+      );
+      return;
+    }
+
+    if (!emailClean.includes('@') || !emailClean.includes('.')) {
+      setTutorFormError('Por favor ingrese un correo electrónico (Gmail) válido.');
+      return;
+    }
+
+    const ok = guardarTutor({
+      ...editingTutor,
+      nombre: nombreClean,
+      apellido: apellidoClean,
+      dni: dniClean,
+      telefono: telClean,
+      email: emailClean
+    });
+    if (ok !== false) {
+      setIsTutorModalOpen(false);
+    }
   };
 
   const handleCreateAlumno = (e) => {
     e.preventDefault();
-    if (!aluNombre.trim() || !aluApellido.trim() || !aluDni.trim()) return;
+    setMatricularError('');
+    if (!aluNombre.trim() || !aluApellido.trim() || !aluDni.trim()) {
+      setMatricularError('Complete Nombre, Apellido y DNI del estudiante.');
+      return;
+    }
+
+    if (tutorMode === 'existente') {
+      if (!tutorExistenteId) {
+        setMatricularError('Debe buscar y seleccionar un tutor existente de la lista.');
+        return;
+      }
+    } else {
+      if (
+        !nuevoTutNombre.trim() ||
+        !nuevoTutApellido.trim() ||
+        !nuevoTutDni.trim() ||
+        !nuevoTutTel.trim() ||
+        !nuevoTutEmail.trim()
+      ) {
+        setMatricularError(
+          'Para registrar un nuevo tutor, todas las celdas son obligatorias: Nombre, Apellido, DNI, Teléfono y Gmail.'
+        );
+        return;
+      }
+      if (!nuevoTutEmail.trim().includes('@') || !nuevoTutEmail.trim().includes('.')) {
+        setMatricularError('Ingrese un correo electrónico (Gmail) válido para el nuevo tutor.');
+        return;
+      }
+    }
 
     const creado = registrarAlumno({
       alumnoData: {
         nombre: aluNombre,
         apellido: aluApellido,
         dni: aluDni,
+        anioLectivo: aluAnioLectivo,
         curso: aluCurso,
         division: aluDivision,
         turno: aluTurno
@@ -321,18 +481,20 @@ export default function PadronView() {
       }
     });
 
+    if (!creado) return;
+
     setIsMatricularModalOpen(false);
     setAluNombre('');
     setAluApellido('');
     setAluDni('');
+    setTutorExistenteSearch('');
     setNuevoTutNombre('');
     setNuevoTutApellido('');
     setNuevoTutDni('');
     setNuevoTutTel('');
     setNuevoTutEmail('');
-    if (creado) {
-      selectStudent(creado.id);
-    }
+    setMatricularError('');
+    selectStudent(creado.id);
   };
 
   // Abrir Modal de Solicitud de Baja
@@ -393,6 +555,7 @@ export default function PadronView() {
       nombre: alu.nombre,
       apellido: alu.apellido,
       dni: alu.dni,
+      anioLectivo: alu.anioLectivo || '2026',
       curso: alu.curso,
       division: alu.division,
       turno: alu.turno
@@ -416,6 +579,7 @@ export default function PadronView() {
   const handleOpenVinculoModal = (alu) => {
     setTargetStudentForVinculo(alu);
     setSelectedNuevoTutorId(alu.tutorId);
+    setVinculoTutorSearch('');
     setOpenDropdownId(null);
     setIsVinculoModalOpen(true);
   };
@@ -528,38 +692,66 @@ export default function PadronView() {
          ========================================================= */}
       {subTab === 'estudiantes' && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200/90 dark:border-slate-800 overflow-hidden transition-colors">
-          {/* Contenedor Coherente y Responsive de Filtros */}
-          <div className="p-4 bg-slate-50/80 dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-center">
-              {/* Barra de Búsqueda Predictiva */}
-              <div className="lg:col-span-4 relative">
-                <i className="fa-solid fa-search absolute left-3.5 top-3 text-slate-400 text-xs"></i>
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar por DNI, Nombre, Apellido o Tutor..."
-                  className="w-full pl-9 pr-8 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                />
-                {search && (
-                  <button
-                    onClick={() => setSearch('')}
-                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs"
-                    title="Limpiar búsqueda"
-                  >
-                    <i className="fa-solid fa-circle-xmark"></i>
-                  </button>
-                )}
+          {/* Contenedor Coherente y Responsive de Filtros por Año, Curso, División y Búsqueda */}
+          <div className="p-4 bg-slate-50/80 dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                <i className="fa-solid fa-filter text-blue-600 dark:text-blue-400"></i>
+                <span>Filtrar Alumnos por Año, Curso y División (o buscar por Nombre / DNI)</span>
+              </div>
+              {(anioFilter !== 'todos' ||
+                cursoFilter !== 'todos' ||
+                divisionFilter !== 'todos' ||
+                estadoFilter !== 'todos' ||
+                hermanoFilter !== 'todos' ||
+                search) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAnioFilter('todos');
+                    setCursoFilter('todos');
+                    setDivisionFilter('todos');
+                    setEstadoFilter('todos');
+                    setHermanoFilter('todos');
+                    setSearch('');
+                  }}
+                  className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                >
+                  <i className="fa-solid fa-rotate-left"></i>
+                  <span>Restablecer todos los filtros</span>
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2.5 items-center">
+              {/* 1. Selector de Año Lectivo */}
+              <div className="lg:col-span-2">
+                <label className="block text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">
+                  Año Lectivo
+                </label>
+                <select
+                  value={anioFilter}
+                  onChange={(e) => setAnioFilter(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                >
+                  <option value="todos">Todos los Años</option>
+                  <option value="2026">Año 2026</option>
+                  <option value="2025">Año 2025</option>
+                  <option value="2024">Año 2024</option>
+                </select>
               </div>
 
-              {/* Selector Curso / Año */}
-              <div className="lg:col-span-3">
+              {/* 2. Selector de Curso (1° a 6° Año) */}
+              <div className="lg:col-span-2">
+                <label className="block text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">
+                  Curso
+                </label>
                 <select
                   value={cursoFilter}
                   onChange={(e) => setCursoFilter(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                 >
-                  <option value="todos">Todos los Cursos (1° a 6° Año)</option>
+                  <option value="todos">Todos los Cursos</option>
                   <option value="1° Año">1° Año</option>
                   <option value="2° Año">2° Año</option>
                   <option value="3° Año">3° Año</option>
@@ -569,32 +761,81 @@ export default function PadronView() {
                 </select>
               </div>
 
-              {/* Selector Estado Financiero / Matrícula */}
-              <div className="lg:col-span-3">
+              {/* 3. Selector de División (A, B, C) */}
+              <div className="lg:col-span-2">
+                <label className="block text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">
+                  División
+                </label>
+                <select
+                  value={divisionFilter}
+                  onChange={(e) => setDivisionFilter(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                >
+                  <option value="todos">Todas las Div.</option>
+                  <option value="A">División "A"</option>
+                  <option value="B">División "B"</option>
+                  <option value="C">División "C"</option>
+                </select>
+              </div>
+
+              {/* 4. Selector Estado Financiero / Matrícula */}
+              <div className="lg:col-span-2">
+                <label className="block text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">
+                  Estado Cuotas
+                </label>
                 <select
                   value={estadoFilter}
                   onChange={(e) => setEstadoFilter(e.target.value)}
                   className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                 >
-                  <option value="todos">Estado: Todos</option>
-                  <option value="aldia">Al Día (Sin cuotas vencidas)</option>
-                  <option value="mora">Con Cuotas Vencidas (Mora)</option>
-                  <option value="baja_pendiente">Solicitud de Baja Pendiente</option>
-                  <option value="baja_efectiva">Baja Institucional Efectivizada</option>
+                  <option value="todos">Todos</option>
+                  <option value="aldia">Al Día</option>
+                  <option value="mora">En Mora</option>
+                  <option value="baja_pendiente">Baja Pendiente</option>
+                  <option value="baja_efectiva">Baja Efectiva</option>
                 </select>
               </div>
 
-              {/* Selector Vínculo Familiar */}
-              <div className="lg:col-span-2">
+              {/* 5. Selector Vínculo Familiar */}
+              <div className="lg:col-span-1">
+                <label className="block text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">
+                  Grupo Fam.
+                </label>
                 <select
                   value={hermanoFilter}
                   onChange={(e) => setHermanoFilter(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  className="w-full px-2.5 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                 >
-                  <option value="todos">Vínculo: Todos</option>
-                  <option value="con_hermanos">Con Hermanos (20% Bonificación)</option>
-                  <option value="hijo_unico">Sin Hermanos (Tarifa Plena)</option>
+                  <option value="todos">Todos</option>
+                  <option value="con_hermanos">C/ Hnos (-20%)</option>
+                  <option value="hijo_unico">Sin Hnos</option>
                 </select>
+              </div>
+
+              {/* 6. Barra de Búsqueda Opcional por Nombre / Apellido / DNI / Tutor */}
+              <div className="lg:col-span-3">
+                <label className="block text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">
+                  Búsqueda por Nombre, Apellido o DNI
+                </label>
+                <div className="relative">
+                  <i className="fa-solid fa-search absolute left-3.5 top-2.5 text-slate-400 text-xs"></i>
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Nombre, Apellido o DNI..."
+                    className="w-full pl-9 pr-8 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  />
+                  {search && (
+                    <button
+                      onClick={() => setSearch('')}
+                      className="absolute right-3 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs"
+                      title="Limpiar búsqueda"
+                    >
+                      <i className="fa-solid fa-circle-xmark"></i>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -980,26 +1221,114 @@ export default function PadronView() {
          ========================================================= */}
       {subTab === 'tutores' && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200/90 dark:border-slate-800 overflow-hidden transition-colors">
-          <div className="p-4 bg-slate-50/80 dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                <i className="fa-solid fa-people-roof text-blue-600 dark:text-blue-400"></i>
-                Padrón Oficial de Socios y Tutores
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Registro y actualización de datos de contacto de padres, madres y tutores responsables.
-              </p>
+          <div className="p-4 bg-slate-50/80 dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                  <i className="fa-solid fa-people-roof text-blue-600 dark:text-blue-400"></i>
+                  Padrón Oficial de Socios y Tutores
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Filtre tutores por Año, Curso y División de sus hijos o busque por Nombre y Documento (DNI).
+                </p>
+              </div>
+
+              {(tutorAnioFilter !== 'todos' ||
+                tutorCursoFilter !== 'todos' ||
+                tutorDivisionFilter !== 'todos' ||
+                tutorSearch) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTutorAnioFilter('todos');
+                    setTutorCursoFilter('todos');
+                    setTutorDivisionFilter('todos');
+                    setTutorSearch('');
+                  }}
+                  className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                >
+                  <i className="fa-solid fa-rotate-left"></i>
+                  <span>Limpiar filtros de tutores</span>
+                </button>
+              )}
             </div>
 
-            <div className="w-full sm:w-72 relative">
-              <i className="fa-solid fa-search absolute left-3 top-2.5 text-slate-400 text-xs"></i>
-              <input
-                type="text"
-                value={tutorSearch}
-                onChange={(e) => setTutorSearch(e.target.value)}
-                placeholder="Buscar por DNI, Nombre o Tel..."
-                className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2.5 items-center">
+              <div className="lg:col-span-2">
+                <label className="block text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">
+                  Año Lectivo Hijo/a
+                </label>
+                <select
+                  value={tutorAnioFilter}
+                  onChange={(e) => setTutorAnioFilter(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold"
+                >
+                  <option value="todos">Todos los Años</option>
+                  <option value="2026">Año 2026</option>
+                  <option value="2025">Año 2025</option>
+                  <option value="2024">Año 2024</option>
+                </select>
+              </div>
+
+              <div className="lg:col-span-3">
+                <label className="block text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">
+                  Curso del Hijo/a
+                </label>
+                <select
+                  value={tutorCursoFilter}
+                  onChange={(e) => setTutorCursoFilter(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold"
+                >
+                  <option value="todos">Todos los Cursos</option>
+                  <option value="1° Año">1° Año</option>
+                  <option value="2° Año">2° Año</option>
+                  <option value="3° Año">3° Año</option>
+                  <option value="4° Año">4° Año</option>
+                  <option value="5° Año">5° Año</option>
+                  <option value="6° Año">6° Año</option>
+                </select>
+              </div>
+
+              <div className="lg:col-span-2">
+                <label className="block text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">
+                  División del Hijo/a
+                </label>
+                <select
+                  value={tutorDivisionFilter}
+                  onChange={(e) => setTutorDivisionFilter(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-semibold"
+                >
+                  <option value="todos">Todas las Div.</option>
+                  <option value="A">División "A"</option>
+                  <option value="B">División "B"</option>
+                  <option value="C">División "C"</option>
+                </select>
+              </div>
+
+              <div className="lg:col-span-5">
+                <label className="block text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">
+                  Buscar Tutor por Nombre, Apellido, DNI o Teléfono
+                </label>
+                <div className="relative">
+                  <i className="fa-solid fa-search absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+                  <input
+                    type="text"
+                    value={tutorSearch}
+                    onChange={(e) => setTutorSearch(e.target.value)}
+                    placeholder="Buscar por Nombre, Apellido, DNI o Gmail..."
+                    className="w-full pl-8 pr-8 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                  />
+                  {tutorSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setTutorSearch('')}
+                      className="absolute right-3 top-2 text-slate-400 hover:text-slate-600 text-xs"
+                    >
+                      <i className="fa-solid fa-circle-xmark"></i>
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1516,7 +1845,24 @@ export default function PadronView() {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                    Año Lectivo
+                  </label>
+                  <select
+                    value={editingAlumnoData.anioLectivo || '2026'}
+                    onChange={(e) =>
+                      setEditingAlumnoData({ ...editingAlumnoData, anioLectivo: e.target.value })
+                    }
+                    className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                  >
+                    <option value="2026">2026</option>
+                    <option value="2025">2025</option>
+                    <option value="2024">2024</option>
+                  </select>
+                </div>
+
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
                     Curso
@@ -1633,24 +1979,86 @@ export default function PadronView() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Seleccionar Socio / Tutor Responsable
+                <div className="space-y-2.5">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">
+                    Buscar Tutor Existente por Nombre, Apellido o Documento (DNI) *
                   </label>
-                  <select
-                    value={selectedNuevoTutorId}
-                    onChange={(e) => setSelectedNuevoTutorId(e.target.value)}
-                    className="w-full px-3 py-2.5 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
-                  >
-                    {state.tutores.map((tut) => {
-                      const countHijos = state.alumnos.filter((a) => a.tutorId === tut.id).length;
-                      return (
-                        <option key={tut.id} value={tut.id}>
-                          {tut.apellido}, {tut.nombre} (DNI {tut.dni}) — {countHijos} estudiante(s) vinculado(s)
-                        </option>
-                      );
-                    })}
-                  </select>
+                  <div className="relative">
+                    <i className="fa-solid fa-magnifying-glass absolute left-3.5 top-2.5 text-slate-400 text-xs"></i>
+                    <input
+                      type="text"
+                      value={vinculoTutorSearch}
+                      onChange={(e) => setVinculoTutorSearch(e.target.value)}
+                      placeholder="Escriba el Nombre, Apellido o DNI del tutor para buscar..."
+                      className="w-full pl-9 pr-8 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                    />
+                    {vinculoTutorSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setVinculoTutorSearch('')}
+                        className="absolute right-3 top-2 text-slate-400 hover:text-slate-600 text-xs"
+                      >
+                        <i className="fa-solid fa-circle-xmark"></i>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Lista filtrada de tutores */}
+                  <div className="max-h-44 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+                    {matchingTutoresParaVinculo.length === 0 ? (
+                      <div className="p-3 text-center text-xs text-slate-400">
+                        No se encontraron tutores con ese nombre o DNI.
+                      </div>
+                    ) : (
+                      matchingTutoresParaVinculo.map((tut) => {
+                        const countHijos = state.alumnos.filter((a) => a.tutorId === tut.id).length;
+                        const isPicked = selectedNuevoTutorId === tut.id;
+                        return (
+                          <button
+                            key={tut.id}
+                            type="button"
+                            onClick={() => setSelectedNuevoTutorId(tut.id)}
+                            className={`w-full text-left p-2.5 text-xs transition flex items-center justify-between ${
+                              isPicked
+                                ? 'bg-indigo-50 dark:bg-indigo-950/60 border-l-4 border-l-indigo-600'
+                                : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                            }`}
+                          >
+                            <div>
+                              <span className="font-bold text-slate-800 dark:text-slate-100">
+                                {tut.apellido}, {tut.nombre}
+                              </span>
+                              <span className="block text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                                DNI {tut.dni} • {tut.email || 'S/D'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                {countHijos} hijo(s)
+                              </span>
+                              {isPicked && (
+                                <i className="fa-solid fa-circle-check text-indigo-600 dark:text-indigo-400 text-sm"></i>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {selectedTutor && (
+                    <div className="p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-400 block">
+                          Tutor Seleccionado
+                        </span>
+                        <span className="font-bold text-slate-800 dark:text-white">
+                          {selectedTutor.apellido}, {selectedTutor.nombre} (DNI {selectedTutor.dni})
+                        </span>
+                      </div>
+                      <i className="fa-solid fa-user-check text-emerald-600 text-base"></i>
+                    </div>
+                  )}
                 </div>
 
                 {/* Previsualización del beneficio */}
@@ -1697,354 +2105,541 @@ export default function PadronView() {
       {/* =========================================================
           MODAL 5: MATRICULAR NUEVO ESTUDIANTE
          ========================================================= */}
-      {isMatricularModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[92vh] overflow-y-auto">
-            <div className="bg-blue-900 text-white px-6 py-4 flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-base flex items-center gap-2">
-                  <i className="fa-solid fa-user-graduate text-emerald-400"></i>
-                  Matricular Nuevo Estudiante
-                </h3>
-                <p className="text-xs text-blue-200 mt-0.5">
-                  Generación automática de aranceles anuales y evaluación de bonificación familiar
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsMatricularModalOpen(false)}
-                className="text-blue-200 hover:text-white"
-              >
-                <i className="fa-solid fa-xmark text-lg"></i>
-              </button>
-            </div>
+      {isMatricularModalOpen && (() => {
+        const selectedTutorObj = state.tutores.find((t) => t.id === tutorExistenteId);
+        const isNuevoTutorComplete =
+          tutorMode !== 'nuevo' ||
+          (Boolean(nuevoTutApellido.trim()) &&
+            Boolean(nuevoTutNombre.trim()) &&
+            Boolean(nuevoTutDni.trim()) &&
+            Boolean(nuevoTutTel.trim()) &&
+            Boolean(nuevoTutEmail.trim()) &&
+            nuevoTutEmail.includes('@'));
+        const isFormReady =
+          Boolean(aluApellido.trim()) &&
+          Boolean(aluNombre.trim()) &&
+          Boolean(aluDni.trim()) &&
+          (tutorMode === 'existente' ? Boolean(tutorExistenteId) : isNuevoTutorComplete);
 
-            <form onSubmit={handleCreateAlumno} className="p-6 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[92vh] overflow-y-auto">
+              <div className="bg-blue-900 text-white px-6 py-4 flex items-center justify-between">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Apellido *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={aluApellido}
-                    onChange={(e) => setAluApellido(e.target.value)}
-                    placeholder="Ej: Gómez"
-                    className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
-                  />
+                  <h3 className="font-bold text-base flex items-center gap-2">
+                    <i className="fa-solid fa-user-graduate text-emerald-400"></i>
+                    Matricular Nuevo Estudiante
+                  </h3>
+                  <p className="text-xs text-blue-200 mt-0.5">
+                    Generación automática de aranceles anuales y evaluación de bonificación familiar
+                  </p>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Nombre *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={aluNombre}
-                    onChange={(e) => setAluNombre(e.target.value)}
-                    placeholder="Ej: Julieta"
-                    className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    DNI *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={aluDni}
-                    onChange={(e) => setAluDni(e.target.value)}
-                    placeholder="Ej: 49.112.233"
-                    className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Curso
-                  </label>
-                  <select
-                    value={aluCurso}
-                    onChange={(e) => setAluCurso(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
-                  >
-                    <option value="1° Año">1° Año</option>
-                    <option value="2° Año">2° Año</option>
-                    <option value="3° Año">3° Año</option>
-                    <option value="4° Año">4° Año</option>
-                    <option value="5° Año">5° Año</option>
-                    <option value="6° Año">6° Año</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    División
-                  </label>
-                  <select
-                    value={aluDivision}
-                    onChange={(e) => setAluDivision(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
-                  >
-                    <option value="A">División A</option>
-                    <option value="B">División B</option>
-                    <option value="C">División C</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Turno
-                  </label>
-                  <select
-                    value={aluTurno}
-                    onChange={(e) => setAluTurno(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
-                  >
-                    <option value="Mañana">Mañana</option>
-                    <option value="Tarde">Tarde</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Vinculación con Tutor */}
-              <div className="pt-3 border-t border-slate-200 dark:border-slate-800">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-2">
-                  Vinculación Familiar con Socio / Tutor
-                </label>
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  <button
-                    type="button"
-                    onClick={() => setTutorMode('existente')}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
-                      tutorMode === 'existente'
-                        ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-500 text-blue-900 dark:text-blue-300'
-                        : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
-                    }`}
-                  >
-                    <i className="fa-solid fa-people-roof mr-1.5"></i>
-                    Vincular a Tutor Existente
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTutorMode('nuevo')}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
-                      tutorMode === 'nuevo'
-                        ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-500 text-blue-900 dark:text-blue-300'
-                        : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
-                    }`}
-                  >
-                    <i className="fa-solid fa-user-plus mr-1.5"></i>
-                    Registrar Nuevo Tutor
-                  </button>
-                </div>
-
-                {tutorMode === 'existente' ? (
-                  <div>
-                    <select
-                      value={tutorExistenteId}
-                      onChange={(e) => setTutorExistenteId(e.target.value)}
-                      className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
-                    >
-                      {state.tutores.map((t) => {
-                        const cantHijos = state.alumnos.filter((a) => a.tutorId === t.id).length;
-                        return (
-                          <option key={t.id} value={t.id}>
-                            {t.apellido}, {t.nombre} (DNI {t.dni}) — {cantHijos} estudiante(s) actualmente
-                          </option>
-                        );
-                      })}
-                    </select>
-                    <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-1.5 font-medium flex items-center gap-1">
-                      <i className="fa-solid fa-circle-check"></i>
-                      Si el tutor ya registra hijos en la institución, el sistema activará automáticamente el 20% de bonificación.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700">
-                    <input
-                      type="text"
-                      required
-                      value={nuevoTutApellido}
-                      onChange={(e) => setNuevoTutApellido(e.target.value)}
-                      placeholder="Apellido del Tutor *"
-                      className="px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
-                    />
-                    <input
-                      type="text"
-                      required
-                      value={nuevoTutNombre}
-                      onChange={(e) => setNuevoTutNombre(e.target.value)}
-                      placeholder="Nombre del Tutor *"
-                      className="px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
-                    />
-                    <input
-                      type="text"
-                      required
-                      value={nuevoTutDni}
-                      onChange={(e) => setNuevoTutDni(e.target.value)}
-                      placeholder="DNI del Tutor *"
-                      className="px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-mono"
-                    />
-                    <input
-                      type="text"
-                      value={nuevoTutTel}
-                      onChange={(e) => setNuevoTutTel(e.target.value)}
-                      placeholder="Teléfono de contacto"
-                      className="px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
-                    />
-                    <input
-                      type="email"
-                      value={nuevoTutEmail}
-                      onChange={(e) => setNuevoTutEmail(e.target.value)}
-                      placeholder="Correo Electrónico"
-                      className="sm:col-span-2 px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsMatricularModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300"
+                  className="text-blue-200 hover:text-white"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm"
-                >
-                  Guardar Estudiante y Generar Cuotas
+                  <i className="fa-solid fa-xmark text-lg"></i>
                 </button>
               </div>
-            </form>
+
+              <form onSubmit={handleCreateAlumno} className="p-6 space-y-4">
+                {matricularError && (
+                  <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-xs font-bold text-rose-700 dark:text-rose-200 flex items-center gap-2">
+                    <i className="fa-solid fa-triangle-exclamation text-rose-600"></i>
+                    <span>{matricularError}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                      Apellido *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={aluApellido}
+                      onChange={(e) => setAluApellido(e.target.value)}
+                      placeholder="Ej: Gómez"
+                      className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                      Nombre *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={aluNombre}
+                      onChange={(e) => setAluNombre(e.target.value)}
+                      placeholder="Ej: Julieta"
+                      className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                      DNI *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={aluDni}
+                      onChange={(e) => setAluDni(e.target.value)}
+                      placeholder="Ej: 49.112.233"
+                      className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                      Año Lectivo
+                    </label>
+                    <select
+                      value={aluAnioLectivo}
+                      onChange={(e) => setAluAnioLectivo(e.target.value)}
+                      className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                    >
+                      <option value="2026">2026</option>
+                      <option value="2025">2025</option>
+                      <option value="2024">2024</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                      Curso
+                    </label>
+                    <select
+                      value={aluCurso}
+                      onChange={(e) => setAluCurso(e.target.value)}
+                      className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                    >
+                      <option value="1° Año">1° Año</option>
+                      <option value="2° Año">2° Año</option>
+                      <option value="3° Año">3° Año</option>
+                      <option value="4° Año">4° Año</option>
+                      <option value="5° Año">5° Año</option>
+                      <option value="6° Año">6° Año</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                      División
+                    </label>
+                    <select
+                      value={aluDivision}
+                      onChange={(e) => setAluDivision(e.target.value)}
+                      className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                    >
+                      <option value="A">División A</option>
+                      <option value="B">División B</option>
+                      <option value="C">División C</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                      Turno
+                    </label>
+                    <select
+                      value={aluTurno}
+                      onChange={(e) => setAluTurno(e.target.value)}
+                      className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                    >
+                      <option value="Mañana">Mañana</option>
+                      <option value="Tarde">Tarde</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Vinculación con Tutor */}
+                <div className="pt-3 border-t border-slate-200 dark:border-slate-800">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-2">
+                    Vinculación Familiar con Socio / Tutor
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTutorMode('existente');
+                        setMatricularError('');
+                      }}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
+                        tutorMode === 'existente'
+                          ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-500 text-blue-900 dark:text-blue-300'
+                          : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      <i className="fa-solid fa-people-roof mr-1.5"></i>
+                      Vincular a Tutor Existente
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTutorMode('nuevo');
+                        setMatricularError('');
+                      }}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
+                        tutorMode === 'nuevo'
+                          ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-500 text-blue-900 dark:text-blue-300'
+                          : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      <i className="fa-solid fa-user-plus mr-1.5"></i>
+                      Registrar Nuevo Tutor
+                    </button>
+                  </div>
+
+                  {tutorMode === 'existente' ? (
+                    <div className="space-y-2.5 bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                        Buscar Tutor por Nombre, Apellido o Documento (DNI):
+                      </label>
+                      <div className="relative">
+                        <i className="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+                        <input
+                          type="text"
+                          value={tutorExistenteSearch}
+                          onChange={(e) => setTutorExistenteSearch(e.target.value)}
+                          placeholder="Escriba el Nombre, Apellido o DNI del tutor (ej: Gómez o 28.111.222)..."
+                          className="w-full pl-8 pr-8 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        />
+                        {tutorExistenteSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setTutorExistenteSearch('')}
+                            className="absolute right-3 top-2 text-slate-400 hover:text-slate-600 text-xs"
+                          >
+                            <i className="fa-solid fa-circle-xmark"></i>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Resultados de búsqueda de tutor */}
+                      <div className="max-h-40 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+                        {matchingTutoresParaMatricula.length === 0 ? (
+                          <div className="p-3 text-center text-xs text-slate-400">
+                            No se encontraron tutores con ese Nombre o DNI. Puede usar la pestaña "Registrar Nuevo Tutor".
+                          </div>
+                        ) : (
+                          matchingTutoresParaMatricula.map((t) => {
+                            const cantHijos = state.alumnos.filter((a) => a.tutorId === t.id).length;
+                            const isSelected = tutorExistenteId === t.id;
+                            return (
+                              <button
+                                key={t.id}
+                                type="button"
+                                onClick={() => setTutorExistenteId(t.id)}
+                                className={`w-full text-left p-2.5 text-xs transition flex items-center justify-between ${
+                                  isSelected
+                                    ? 'bg-blue-50 dark:bg-blue-950/60 border-l-4 border-l-blue-600'
+                                    : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                                }`}
+                              >
+                                <div>
+                                  <span className="font-bold text-slate-800 dark:text-slate-100">
+                                    {t.apellido}, {t.nombre}
+                                  </span>
+                                  <span className="block text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                                    DNI {t.dni} • Tel: {t.telefono || 'S/D'} • {t.email || 'S/D'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                    {cantHijos} hijo(s)
+                                  </span>
+                                  {isSelected && (
+                                    <i className="fa-solid fa-circle-check text-blue-600 dark:text-blue-400 text-sm"></i>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+
+                      {selectedTutorObj && (
+                        <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between text-xs">
+                          <div>
+                            <span className="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-400 block">
+                              Tutor Seleccionado para Vincular
+                            </span>
+                            <span className="font-bold text-slate-900 dark:text-white">
+                              {selectedTutorObj.apellido}, {selectedTutorObj.nombre} — DNI {selectedTutorObj.dni}
+                            </span>
+                          </div>
+                          <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+                            <i className="fa-solid fa-check mr-1"></i>
+                            Vinculado
+                          </span>
+                        </div>
+                      )}
+
+                      <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium flex items-center gap-1">
+                        <i className="fa-solid fa-circle-check"></i>
+                        Si el tutor ya registra hijos en la institución, el sistema activará automáticamente el 20% de bonificación.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5 bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                      <p className="text-[11px] font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                        <i className="fa-solid fa-asterisk text-[10px]"></i>
+                        <span>Todos los campos del nuevo tutor son obligatorios (Nombre, Apellido, DNI, Teléfono y Gmail).</span>
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300 mb-1">
+                            Apellido del Tutor *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={nuevoTutApellido}
+                            onChange={(e) => setNuevoTutApellido(e.target.value)}
+                            placeholder="Ej: Rivas *"
+                            className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300 mb-1">
+                            Nombre del Tutor *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={nuevoTutNombre}
+                            onChange={(e) => setNuevoTutNombre(e.target.value)}
+                            placeholder="Ej: Laura *"
+                            className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300 mb-1">
+                            DNI del Tutor *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={nuevoTutDni}
+                            onChange={(e) => setNuevoTutDni(e.target.value)}
+                            placeholder="Ej: 30.222.333 *"
+                            className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300 mb-1">
+                            Número de Teléfono *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={nuevoTutTel}
+                            onChange={(e) => setNuevoTutTel(e.target.value)}
+                            placeholder="Ej: 11-4567-8901 *"
+                            className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300 mb-1">
+                            Gmail / Correo Electrónico *
+                          </label>
+                          <input
+                            type="email"
+                            required
+                            value={nuevoTutEmail}
+                            onChange={(e) => setNuevoTutEmail(e.target.value)}
+                            placeholder="Ej: nombre.apellido@gmail.com *"
+                            className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsMatricularModalOpen(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!isFormReady}
+                    className={`px-5 py-2 rounded-xl text-white text-xs font-bold shadow-sm transition ${
+                      isFormReady
+                        ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer'
+                        : 'bg-slate-400 dark:bg-slate-700 cursor-not-allowed opacity-70'
+                    }`}
+                  >
+                    Guardar Estudiante y Generar Cuotas
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* =========================================================
-          MODAL 6: REGISTRAR O ACTUALIZAR SOCIO TUTOR
+          MODAL 6: REGISTRAR O ACTUALIZAR SOCIO TUTOR (CAMPOS OBLIGATORIOS)
          ========================================================= */}
-      {isTutorModalOpen && editingTutor && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-            <div className="bg-slate-800 text-white px-6 py-4 flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-sm">
-                  {editingTutor.id ? 'Actualizar Datos del Socio / Tutor' : 'Registrar Nuevo Socio / Tutor'}
-                </h3>
-                <p className="text-xs text-slate-300 mt-0.5">
-                  Padrón de Cooperadora Escolar
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsTutorModalOpen(false)}
-                className="text-slate-400 hover:text-white"
-              >
-                <i className="fa-solid fa-xmark"></i>
-              </button>
-            </div>
+      {isTutorModalOpen && editingTutor && (() => {
+        const isTutorComplete =
+          Boolean((editingTutor.apellido || '').trim()) &&
+          Boolean((editingTutor.nombre || '').trim()) &&
+          Boolean((editingTutor.dni || '').trim()) &&
+          Boolean((editingTutor.telefono || '').trim()) &&
+          Boolean((editingTutor.email || '').trim()) &&
+          (editingTutor.email || '').includes('@');
 
-            <form onSubmit={handleSaveTutor} className="p-6 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+              <div className="bg-slate-800 text-white px-6 py-4 flex items-center justify-between">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Apellido *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={editingTutor.apellido}
-                    onChange={(e) =>
-                      setEditingTutor({ ...editingTutor, apellido: e.target.value })
-                    }
-                    className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
-                  />
+                  <h3 className="font-bold text-sm">
+                    {editingTutor.id ? 'Actualizar Datos del Socio / Tutor' : 'Registrar Nuevo Socio / Tutor'}
+                  </h3>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    Todos los campos marcados con (*) son obligatorios
+                  </p>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Nombre *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={editingTutor.nombre}
-                    onChange={(e) =>
-                      setEditingTutor({ ...editingTutor, nombre: e.target.value })
-                    }
-                    className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Documento (DNI) *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={editingTutor.dni}
-                    onChange={(e) =>
-                      setEditingTutor({ ...editingTutor, dni: e.target.value })
-                    }
-                    className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Teléfono
-                  </label>
-                  <input
-                    type="text"
-                    value={editingTutor.telefono || ''}
-                    onChange={(e) =>
-                      setEditingTutor({ ...editingTutor, telefono: e.target.value })
-                    }
-                    className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                  Correo Electrónico
-                </label>
-                <input
-                  type="email"
-                  value={editingTutor.email || ''}
-                  onChange={(e) =>
-                    setEditingTutor({ ...editingTutor, email: e.target.value })
-                  }
-                  className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsTutorModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300"
+                  className="text-slate-400 hover:text-white"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
-                >
-                  Guardar Tutor
+                  <i className="fa-solid fa-xmark"></i>
                 </button>
               </div>
-            </form>
+
+              <form onSubmit={handleSaveTutor} className="p-6 space-y-3.5">
+                {tutorFormError && (
+                  <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-xs font-bold text-rose-700 dark:text-rose-200 flex items-start gap-2">
+                    <i className="fa-solid fa-triangle-exclamation text-rose-600 mt-0.5"></i>
+                    <span>{tutorFormError}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                      Apellido *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Apellido obligatorio *"
+                      value={editingTutor.apellido}
+                      onChange={(e) =>
+                        setEditingTutor({ ...editingTutor, apellido: e.target.value })
+                      }
+                      className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                      Nombre *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Nombre obligatorio *"
+                      value={editingTutor.nombre}
+                      onChange={(e) =>
+                        setEditingTutor({ ...editingTutor, nombre: e.target.value })
+                      }
+                      className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                      Documento (DNI) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ej: 30.111.222 *"
+                      value={editingTutor.dni}
+                      onChange={(e) =>
+                        setEditingTutor({ ...editingTutor, dni: e.target.value })
+                      }
+                      className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                      Número de Teléfono *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ej: 11-4567-8901 *"
+                      value={editingTutor.telefono || ''}
+                      onChange={(e) =>
+                        setEditingTutor({ ...editingTutor, telefono: e.target.value })
+                      }
+                      className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                    Gmail / Correo Electrónico *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="Ej: tutor@gmail.com *"
+                    value={editingTutor.email || ''}
+                    onChange={(e) =>
+                      setEditingTutor({ ...editingTutor, email: e.target.value })
+                    }
+                    className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                  />
+                </div>
+
+                {!isTutorComplete && (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400 font-semibold flex items-center gap-1.5">
+                    <i className="fa-solid fa-circle-info"></i>
+                    <span>Complete Nombre, Apellido, DNI, Teléfono y Gmail para habilitar la confirmación.</span>
+                  </p>
+                )}
+
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsTutorModalOpen(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!isTutorComplete}
+                    className={`px-5 py-2 rounded-xl text-white text-xs font-bold transition ${
+                      isTutorComplete
+                        ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer shadow-sm'
+                        : 'bg-slate-400 dark:bg-slate-700 cursor-not-allowed opacity-70'
+                    }`}
+                  >
+                    Confirmar y Guardar Tutor
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* =========================================================
           MODAL 7: EMISIÓN DE CONSTANCIAS EN LOTE

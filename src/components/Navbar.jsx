@@ -112,16 +112,16 @@ export default function Navbar() {
             <div>
               <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                 <span className="font-black text-slate-900 dark:text-white tracking-tight text-base sm:text-lg">
-                  Escuela Normal Superior Dalmacio Vélez Sársfield
+                  Sistema Interno para la Cooperadora
                 </span>
-                <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 font-extrabold border border-emerald-300 dark:border-emerald-700">
-                  Cooperadora Escolar
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 font-extrabold border border-emerald-300 dark:border-emerald-700">
+                  ENS Dalmacio Vélez Sársfield
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-2 flex-wrap">
                 <span>Gestión Financiera, Cobranzas y Aranceles</span>
                 <span className="hidden sm:inline">•</span>
-                <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
                   CUIT: {state.cooperadora.cuit} • Ciclo Lectivo {state.cooperadora.cicloLectivo}
                 </span>
               </p>

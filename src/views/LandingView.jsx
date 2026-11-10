@@ -41,11 +41,11 @@ export default function LandingView() {
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="text-sm sm:text-base font-black text-slate-900 dark:text-white tracking-tight leading-none">
-                    Escuela Normal Superior Dalmacio Vélez Sársfield
+                    Sistema Interno para la Cooperadora
                   </h1>
                 </div>
-                <div className="flex items-center gap-2 text-[11px] sm:text-xs text-emerald-700 dark:text-emerald-400 font-extrabold mt-1">
-                  <span>Asociación Cooperadora</span>
+                <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400 font-extrabold mt-1">
+                  <span>Escuela Normal Superior Dalmacio Vélez Sársfield</span>
                   <span className="text-slate-400">•</span>
                   <span className="font-mono text-slate-500 dark:text-slate-400">Ciclo Lectivo {cicloLectivo}</span>
                 </div>
@@ -226,7 +226,7 @@ export default function LandingView() {
 
           <div className="text-center md:text-right text-[11px] space-y-1">
             <p className="font-mono font-bold text-slate-700 dark:text-slate-300">
-              Sistema de Gestión Integral de Cooperadora Escolar
+              Sistema Interno para la Cooperadora
             </p>
             <p className="text-slate-400">
               Arquitectura de Software Full Stack • Módulos 1 a 4 • React 18 + JWT + RBAC

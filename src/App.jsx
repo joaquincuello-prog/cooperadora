@@ -55,7 +55,7 @@ function MainLayout() {
               className="w-6 h-6 object-contain"
             />
             <span>
-              <strong>Asociación Cooperadora Escuela Normal Superior Dalmacio Vélez Sársfield</strong> — Sistema de Gestión y Cobranzas
+              <strong>Sistema Interno para la Cooperadora</strong> — Escuela Normal Superior Dalmacio Vélez Sársfield
             </span>
           </div>
           <div className="font-mono text-[11px]">
